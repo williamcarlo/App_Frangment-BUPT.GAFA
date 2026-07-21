@@ -59,4 +59,6 @@ entry/src/main/ets/
 
 脚本会优先使用 DevEco Studio 自带的 Hvigor。非默认安装位置可设置 `DEVECO_STUDIO_HOME`，或通过 `HVIGORW_JS` 直接指定 `tools/hvigor/bin/hvigorw.js` 的绝对路径。
 
+工程采用 Hvigor `modelVersion: 5.0.0`。`hvigorfile.ts` 中使用的 `@ohos/hvigor-ohos-plugin` 是该版本 Hvigor 提供的内置系统插件，因此不需要写入 `hvigor/hvigor-config.json5` 的 `dependencies`；该字段仅用于项目额外引入的自定义 Hvigor 插件。
+
 > 当前版本聚焦产品骨架。ArkData 持久化、系统卡片、通知调度、端侧语义关联和真实社区服务将在后续迭代接入。

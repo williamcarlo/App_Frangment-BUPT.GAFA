@@ -1,6 +1,9 @@
 {
   "modelVersion": "5.0.0",
-  "dependencies": {},
+  "dependencies": {
+    // @ohos/hvigor-ohos-plugin is provided by Hvigor for modelVersion 5.x.
+    // Keep only custom Hvigor plugins in this object.
+  },
   "execution": {
     "analyze": "normal",
     "daemon": true,
