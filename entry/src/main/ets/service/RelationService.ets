@@ -9,13 +9,13 @@ import {
 export class RelationService {
   static buildBundle(center: FragmentItem, all: FragmentItem[]): ExtensionBundle {
     const related: FragmentItem[] = all
-      .filter((item: FragmentItem) => item.id !== center.id && this.sharedTagCount(center, item) > 0)
+      .filter((item: FragmentItem) => item.id !== center.id && RelationService.sharedTagCount(center, item) > 0)
       .slice(0, 3);
 
     return {
       selfExtensions: related,
-      communityExtensions: this.buildCommunityExtensions(center),
-      directionExtensions: this.buildDirectionExtensions(center)
+      communityExtensions: RelationService.buildCommunityExtensions(center),
+      directionExtensions: RelationService.buildDirectionExtensions(center)
     };
   }
 
@@ -50,7 +50,7 @@ export class RelationService {
   }
 
   private static buildDirectionExtensions(center: FragmentItem): FragmentExtension[] {
-    const prompts: string[] = this.promptsForKind(center.kind);
+    const prompts: string[] = RelationService.promptsForKind(center.kind);
     return prompts.map((prompt: string, index: number) => {
       return {
         id: `${center.id}-direction-${index}`,

@@ -19,6 +19,6 @@ export class TimeUtils {
     if (days < 30) {
       return `${days}天前`;
     }
-    return this.formatDate(timestamp);
+    return TimeUtils.formatDate(timestamp);
   }
 }

@@ -38,7 +38,7 @@ export class FragmentRepository {
   ];
 
   static list(): FragmentItem[] {
-    return this.fragments.slice();
+    return FragmentRepository.fragments.slice();
   }
 
   static add(draft: FragmentDraft): FragmentItem {
@@ -51,11 +51,11 @@ export class FragmentRepository {
       visibility: draft.visibility,
       createdAt: Date.now()
     };
-    this.fragments.unshift(item);
+    FragmentRepository.fragments.unshift(item);
     return item;
   }
 
   static findById(id: string): FragmentItem | undefined {
-    return this.fragments.find((item: FragmentItem) => item.id === id);
+    return FragmentRepository.fragments.find((item: FragmentItem) => item.id === id);
   }
 }
