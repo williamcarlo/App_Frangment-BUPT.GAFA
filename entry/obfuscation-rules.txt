@@ -1,0 +1,1 @@
+# Fragment MVP currently keeps obfuscation disabled for easier debugging.
