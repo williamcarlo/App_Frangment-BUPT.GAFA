@@ -1,6 +1,7 @@
 # HarmonyOS / DevEco Studio
 .hvigor/
 .ohpm/
+oh_modules/
 .idea/
 *.iml
 local.properties
@@ -8,6 +9,9 @@ build/
 **/build/
 **/.preview/
 **/.test/
+
+# Draft-only artifacts
+gyy-frontend-doc.md
 
 # Signing
 *.p12
