@@ -1,0 +1,197 @@
+{
+  "HVIGOR_OHOS_PLUGIN": {
+    "MODULES": [
+      {
+        "MODULE_NAME": "923fe53966c6cd9343e11af776cd4b05be315ea4b200b02e4d5dfb0f929b73bf",
+        "API_TYPE": "stageMode",
+        "INCLUDE_IN_BUILD": true,
+        "IS_COMMAND_LINE_ENTRY_MODULE": true,
+        "BUILD_OPTION": [
+          {
+            "path": "debuggable",
+            "traceValue": true,
+            "value": true
+          },
+          {
+            "path": "copyFrom",
+            "traceValue": false,
+            "value": ""
+          }
+        ],
+        "PACKAGE_JSON": [],
+        "MODULE_TYPE": "entry",
+        "INCREMENTAL_TASKS": {
+          "COMPILE_ARKTS": false
+        },
+        "IS_INCREMENTAL_MODULE": false
+      }
+    ],
+    "NATIVE_COMPILER": "Default",
+    "IS_FULL_BUILD": true,
+    "PACKAGE_JSON": [],
+    "BUILD_MODE": "debug"
+  },
+  "HVIGOR": {
+    "IS_INCREMENTAL": true,
+    "IS_DAEMON": true,
+    "IS_PARALLEL": true,
+    "IS_HVIGORFILE_TYPE_CHECK": false,
+    "IS_EXECUTION_OHPM_BY_HVIGOR": false,
+    "BUILD_ANALYSIS_MODE": "normal",
+    "TASK_TIME": {
+      "923fe53966c6cd9343e11af776cd4b05be315ea4b200b02e4d5dfb0f929b73bf": {
+        "PreBuild": 152185800,
+        "CreateModuleInfo": 922800,
+        "GenerateMetadata": 4869200,
+        "ConfigureCmake": 324900,
+        "MergeProfile": 4347400,
+        "CreateBuildProfile": 3140000,
+        "PreCheckSyscap": 432200,
+        "GeneratePkgContextInfo": 11064500,
+        "GeneratePkgSdkInfo": 3963100,
+        "ProcessIntegratedHsp": 1141700,
+        "BuildNativeWithCmake": 321900,
+        "MakePackInfo": 3701200,
+        "SyscapTransform": 1597600,
+        "ProcessProfile": 563952500,
+        "ProcessRouterMap": 4974100,
+        "ProcessShareConfig": 3102700,
+        "ProcessStartupConfig": 1355100,
+        "BuildNativeWithNinja": 2241100,
+        "ProcessResource": 7379400,
+        "GenerateLoaderJson": 14916700,
+        "ProcessLibs": 7487000,
+        "CompileResource": 980629700,
+        "DoNativeStrip": 3425300,
+        "BuildJS": 3056600,
+        "CacheNativeLibs": 1683179100
+      }
+    },
+    "CUSTOM_TASK_TIME": {},
+    "CUSTOM_PLUGIN_TIME": {},
+    "APIS": [
+      "getProperty"
+    ],
+    "CONFIG_EXPERIMENT": {
+      "ENABLE_MODULE_SKIP": false,
+      "ENABLE_CPP_FUNCTION_LEVEL_INCREMENTAL": false
+    },
+    "CONFIG_PROPERTIES": {},
+    "BUILD_ID": "202607211812121340",
+    "ERROR_MESSAGE": [
+      {
+        "CODE": "10605093",
+        "STACK": "...\n10605093 ArkTS Compiler Error\n...\n10605093 ArkTS Compiler Error\n...\n10605093 ArkTS Compiler Error\n...\n10605038 ArkTS Compiler Error\n...\n10605038 ArkTS Compiler Error\n...\n10605093 ArkTS Compiler Error\n...\n10605093 ArkTS Compiler Error\n...\n10605093 ArkTS Compiler Error\n...\n10605093 ArkTS Compiler Error\n...\n10605093 ArkTS Compiler Error\n...\n10605038 ArkTS Compiler Error\n...\n10505001 ArkTS Compiler Error\n...\n10505001 ArkTS Compiler Error\n...\n10505001 ArkTS Compiler Error\n...\n    at runArkPack (***\\tools\\hvigor\\hvigor-ohos-plugin\\node_modules\\@ohos\\hvigor-arkts-compose\\dist\\src\\ar***k.js:1:5143)\n...\n    at throwArkTsCompilerError (***\\tools\\hvigor\\hvigor-ohos-plugin\\node_modules\\@ohos\\hvigor-arkts-compose\\dist\\src\\data\\co***r.js:1:423)\n    at throwErrorIfHasErrorInfo (***\\tools\\hvigor\\hvigor-ohos-plugin\\node_modules\\@ohos\\hvigor-arkts-compose\\dist\\src\\plugins\\co***n.js:1:4923)\n    at Object.handler (***\\tools\\hvigor\\hvigor-ohos-plugin\\node_modules\\@ohos\\hvigor-arkts-compose\\dist\\src\\plugins\\co***n.js:1:3018)\n    at ***\\tools\\hvigor\\hvigor-ohos-plugin\\node_modules\\@ohos\\hvigor-arkts-base\\node_modules\\rollup\\dist\\shared\\ro***p.js:27864:40",
+        "PROJECT_CONFIG": {
+          "buildMode": "Debug",
+          "compileMode": "esmodule",
+          "moduleType": "entry",
+          "targetName": ".default",
+          "packageManagerType": "ohpm",
+          "isLocalTest": false,
+          "needCoverageInsert": false,
+          "debugLine": false,
+          "compileSdkVersion": 24,
+          "compatibleSdkVersion": 12,
+          "originCompatibleSdkVersion": "5.0.0(12)",
+          "etsLoaderVersion": "6.1.1.125",
+          "etsLoaderReleaseType": "Release",
+          "aotCompileMode": "type",
+          "isCrossplatform": false,
+          "bundleType": "app",
+          "apiVersion": 24,
+          "isFaMode": false,
+          "deviceTypes": [
+            "phone",
+            "tablet",
+            "2in1"
+          ],
+          "integratedHsp": false,
+          "branchElimination": false,
+          "tsImportSendable": false,
+          "resolveConflictMode": true,
+          "useNativeResolver": true,
+          "shouldEmitJs": true,
+          "useTscResolve": false,
+          "singleFileEmit": false,
+          "executionMode": "memory",
+          "isHarDeduplicateEnabled": false,
+          "autoLazyImport": false,
+          "allowEmptyBundleName": false,
+          "reExportCheckMode": "noCheck",
+          "usePathPlaceholder": false,
+          "writeRollupCache": true,
+          "isExpandImportEnabled": false,
+          "ignoreCrossplatformCheck": false,
+          "skipOhModulesLint": false,
+          "enableStrictCheckOHModule": false,
+          "useDeclarationFileSignature": false,
+          "isPreloadSoEnabled": false,
+          "runtimeOS": "HarmonyOS",
+          "sdkInfo": "false:24:6.1.1.125:Release",
+          "useSourceHash": false,
+          "isByteCodeHarOptimize": false,
+          "copyCodeResourceEnable": true,
+          "uiTransformOptimization": false
+        }
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605038",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605038",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605093",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10605038",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10505001",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10505001",
+        "TIMESTAMP": "1784628747338"
+      },
+      {
+        "CODE": "10505001",
+        "TIMESTAMP": "1784628747338"
+      }
+    ],
+    "TOTAL_TIME": 15215773300
+  }
+}
