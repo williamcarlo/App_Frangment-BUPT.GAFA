@@ -1,143 +1,26 @@
-enum AppPage {
-  BOX = 0,
-  COLLECTION = 1,
-  COMMUNITY = 2
-}
-
-class BoxStyle {
-  static readonly PAGE_BG: string = '#F7F3EA'
-  static readonly SURFACE: string = '#FFFFFF'
-  static readonly CARD_BG: string = 'rgba(255, 255, 255, 0.82)'
-  static readonly SOFT_PANEL: string = 'rgba(240, 241, 235, 0.90)'
-  static readonly INPUT_BG: string = '#F3F3F0'
-  static readonly BUTTON_BG: string = '#222520'
-  static readonly TEXT: string = '#222520'
-  static readonly TEXT_SOFT: string = '#6F746E'
-  static readonly TEXT_MUTED: string = '#A1A49E'
-  static readonly TEXT_FAINT: string = '#DADBD6'
-  static readonly HAIRLINE: string = 'rgba(55, 57, 55, 0.08)'
-  static readonly HAIRLINE_SOFT: string = 'rgba(55, 57, 55, 0.05)'
-  static readonly SHADOW: string = 'rgba(44, 47, 45, 0.12)'
-  static readonly SHADOW_SOFT: string = 'rgba(44, 47, 45, 0.08)'
-  static readonly SELECTED_SOFT: string = '#E4E6E0'
-  static readonly SELECTED_TEXT: string = '#465044'
-  static readonly GRAPH_ACTIVE: string = 'rgba(64, 73, 67, 0.88)'
-  static readonly GRAPH_IDLE: string = 'rgba(139, 143, 137, 0.22)'
-  static readonly RADIUS_CARD: number = 28
-  static readonly RADIUS_PANEL: number = 30
-  static readonly RADIUS_PILL: number = 22
-  static readonly ACTION_HEIGHT: number = 58
-  static readonly PILL_HEIGHT: number = 44
-  static readonly MOTION_FAST: number = 180
-  static readonly MOTION_BASE: number = 220
-}
-class FragmentItem {
-  id: string = ''
-  tag: string = ''
-  text: string = ''
-  tone: string = ''
-  remind: string = ''
-  shared: boolean = false
-  createdAt: string = ''
-  createdAtTimestamp: number = 0
-
-  constructor(
-    id: string,
-    tag: string,
-    text: string,
-    tone: string,
-    remind: string,
-    shared: boolean,
-    createdAt: string,
-    createdAtTimestamp: number = Date.now()
-  ) {
-    this.id = id
-    this.tag = tag
-    this.text = text
-    this.tone = tone
-    this.remind = remind
-    this.shared = shared
-    this.createdAt = createdAt
-    this.createdAtTimestamp = createdAtTimestamp
-  }
-}
-
-class GraphNode {
-  key: string = ''
-  label: string = ''
-  name: string = ''
-  tone: string = ''
-  x: number = 0
-  y: number = 0
-  fragmentId: string = ''
-
-  constructor(key: string, label: string, name: string, tone: string, x: number, y: number, fragmentId: string) {
-    this.key = key
-    this.label = label
-    this.name = name
-    this.tone = tone
-    this.x = x
-    this.y = y
-    this.fragmentId = fragmentId
-  }
-}
-
-class GraphEdge {
-  key: string = ''
-  fromKey: string = ''
-  toKey: string = ''
-  color: string = ''
-
-  constructor(key: string, fromKey: string, toKey: string, color: string) {
-    this.key = key
-    this.fromKey = fromKey
-    this.toKey = toKey
-    this.color = color
-  }
-}
-
-class CommunityNode {
-  key: string = ''
-  parent: string = ''
-  title: string = ''
-  tag: string = ''
-  author: string = ''
-  match: string = ''
-  text: string = ''
-  tone: string = ''
-  x: number = 0
-  y: number = 0
-  w: number = 0
-  h: number = 0
-
-  constructor(
-    key: string,
-    parent: string,
-    title: string,
-    tag: string,
-    author: string,
-    match: string,
-    text: string,
-    tone: string,
-    x: number,
-    y: number,
-    w: number,
-    h: number
-  ) {
-    this.key = key
-    this.parent = parent
-    this.title = title
-    this.tag = tag
-    this.author = author
-    this.match = match
-    this.text = text
-    this.tone = tone
-    this.x = x
-    this.y = y
-    this.w = w
-    this.h = h
-  }
-}
+import common from '@ohos.app.ability.common'
+import { CommunityNode, CommunitySaveRecord } from '../model/CommunityModel'
+import { EchoCandidate, EchoRecord } from '../model/EchoModel'
+import {
+  FragmentItem,
+  FragmentRelation,
+  FragmentVisibility,
+  ReminderPreference,
+  visibilityLabel
+} from '../model/FragmentModel'
+import { GraphEdge, GraphNode } from '../model/GraphModel'
+import { SeedData } from '../data/SeedData'
+import { CommunityService } from '../service/CommunityService'
+import { EchoService } from '../service/EchoService'
+import { RelationService } from '../service/RelationService'
+import { AppPage, BoxStyle } from '../theme/FragmentTheme'
+import { DateUtils } from '../utils/DateUtils'
+import { IdService } from '../utils/IdService'
+import {
+  AppDataSnapshot,
+  FragmentAppViewModel,
+  OperationResult
+} from '../viewmodel/FragmentAppViewModel'
 
 @Entry
 @Component
@@ -145,79 +28,138 @@ struct Index {
   @State currentPage: AppPage = AppPage.BOX
   @State graphMode: boolean = false
   @State showInputSheet: boolean = false
-  @State activeFragmentId: string = '03'
+  @State activeFragmentId: string = 'seed-fragment-03'
   @State activeCommunityKey: string = 'root'
   @State expandedCommunityKeys: string[] = ['root']
   @State draftContent: string = ''
   @State draftTag: string = ''
-  @State draftRemind: string = '通勤'
+  @State draftRemind: ReminderPreference = ReminderPreference.COMMUTE
   @State fragmentSearchQuery: string = ''
-  @State shareEnabled: boolean = true
+  @State shareEnabled: boolean = false
   @State shareChoiceMade: boolean = false
   @State inputErrorText: string = ''
   @State toastText: string = ''
   @State showToast: boolean = false
   @State activeGraphNodeKey: string = 'n3'
   @State boxFloatY: number = 0
+  @State archivedFragments: FragmentItem[] = []
+  @State fragmentRelations: FragmentRelation[] = SeedData.relations()
+  @State showPrivacyExplainer: boolean = false
+  @State databaseReady: boolean = false
+  @State editingFragmentId: string = ''
+  @State showArchivedList: boolean = false
+  @State showLifecycleConfirm: boolean = false
+  @State pendingLifecycleAction: string = ''
+  @State pendingLifecycleFragmentId: string = ''
+
+  private viewModel: FragmentAppViewModel = new FragmentAppViewModel()
 
   private graphCanvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
   private graphCanvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.graphCanvasSettings)
-  private graphNodeRadius: number = 10
-  private graphSourceMinX: number = 60
-  private graphSourceMaxX: number = 330
-  private graphSourceMinY: number = 80
-  private graphSourceMaxY: number = 450
+  private graphNodeRadius: number = BoxStyle.GRAPH_NODE_RADIUS
+  private graphSourceMinX: number = BoxStyle.GRAPH_SOURCE_MIN_X
+  private graphSourceMaxX: number = BoxStyle.GRAPH_SOURCE_MAX_X
+  private graphSourceMinY: number = BoxStyle.GRAPH_SOURCE_MIN_Y
+  private graphSourceMaxY: number = BoxStyle.GRAPH_SOURCE_MAX_Y
 
-  @State fragments: FragmentItem[] = [
-    new FragmentItem('01', '通勤观察', '人在很累的时候，不是不想社交，而是不想解释自己。', 'memory', '通勤', true, '07.18', Date.now() - 6 * 24 * 60 * 60 * 1000),
-    new FragmentItem('02', '复盘经验', '临时安排让我焦虑，可能是因为我需要提前准备情绪。', 'self', '睡前', false, '07.19', Date.now() - 5 * 24 * 60 * 60 * 1000),
-    new FragmentItem('03', '社交边界', '我不是讨厌社交，我是讨厌临时社交。', 'self', '周末', true, '07.21', Date.now() - 3 * 24 * 60 * 60 * 1000),
-    new FragmentItem('04', '灵感脑洞', '可以把人的社交状态想成电量，而不是性格。', 'idea', '睡前', true, '07.21', Date.now() - 3 * 24 * 60 * 60 * 1000),
-    new FragmentItem('05', '行动方向', '以后可以提前告诉朋友：我需要一点计划感。', 'idea', '通勤', false, '07.22', Date.now() - 2 * 24 * 60 * 60 * 1000),
-    new FragmentItem('06', '情绪瞬间', '不回复消息不是冷淡，有时只是系统正在降温。', 'memory', '周末', true, '07.22', Date.now() - 2 * 24 * 60 * 60 * 1000)
-  ]
-
-  private graphNodes: GraphNode[] = [
-    new GraphNode('n1', '01', '通勤观察', 'memory', 74, 132, '01'),
-    new GraphNode('n2', '02', '复盘经验', 'self', 178, 92, '02'),
-    new GraphNode('n3', '03', '社交边界', 'self', 184, 294, '03'),
-    new GraphNode('n4', '04', '灵感脑洞', 'idea', 284, 152, '04'),
-    new GraphNode('n5', '05', '行动方向', 'idea', 288, 358, '05'),
-    new GraphNode('n6', '06', '情绪瞬间', 'memory', 116, 432, '06'),
-    new GraphNode('m1', '', '', 'micro', 96, 256, ''),
-    new GraphNode('m2', '', '', 'micro', 134, 306, ''),
-    new GraphNode('m3', '', '', 'micro', 220, 232, ''),
-    new GraphNode('m4', '', '', 'micro', 198, 402, ''),
-    new GraphNode('m5', '', '', 'micro', 318, 264, '')
-  ]
-
-  private graphEdges: GraphEdge[] = [
-    new GraphEdge('e1', 'n1', 'n2', 'rgba(113, 151, 160, 0.30)'),
-    new GraphEdge('e2', 'n1', 'n3', 'rgba(113, 151, 160, 0.18)'),
-    new GraphEdge('e3', 'n2', 'n3', 'rgba(113, 151, 160, 0.20)'),
-    new GraphEdge('e4', 'n3', 'n4', 'rgba(176, 125, 145, 0.20)'),
-    new GraphEdge('e5', 'n3', 'n5', 'rgba(176, 125, 145, 0.24)'),
-    new GraphEdge('e6', 'n3', 'n6', 'rgba(179, 159, 91, 0.28)'),
-    new GraphEdge('e7', 'n4', 'n5', 'rgba(192, 194, 188, 0.30)'),
-    new GraphEdge('e8', 'n1', 'm2', 'rgba(192, 194, 188, 0.24)'),
-    new GraphEdge('e9', 'm3', 'n4', 'rgba(192, 194, 188, 0.24)')
-  ]
-
-  @State communityNodes: CommunityNode[] = [
-    new CommunityNode('root', '', '当前碎片', '当前碎片', '我的 Box', '延申起点', '', 'root', 54, 18, 208, 66),
-    new CommunityNode('similar', 'root', '相似经验', '相似经验', '匿名共享', '关联依据：语义相近', '我发现自己不是抗拒见面，而是抗拒没有边界感的临时邀约。', 'slate', 0, 128, 98, 66),
-    new CommunityNode('opposite', 'root', '相反经验', '相反经验', 'Luna', '另一种视角', '有时突然被叫出去反而让我重新启动，计划太满才会让我失去弹性。', 'blue', 109, 128, 98, 66),
-    new CommunityNode('action', 'root', '行动方向', '可借鉴做法', '匿名共享', '可借鉴线索', '我会给朋友一个默认回复模板：今天电量低，但我不是不在乎。', 'green', 218, 128, 98, 66),
-    new CommunityNode('metaphor', 'opposite', '延申比喻', '延申比喻', 'River', '来自相反经验的分叉', '社交电量也许不是电池，更像天气：它会变，但不需要被评判。', 'rose', 102, 236, 112, 66),
-    new CommunityNode('city', 'similar', '城市观察', '城市观察', 'M.', '来自相似经验的分叉', '早高峰里很多人看起来冷漠，其实只是把情绪调到省电模式。', 'slate', 0, 340, 108, 66),
-    new CommunityNode('reply', 'action', '关系提醒', '关系提醒', 'K', '来自行动做法的分叉', '边界不是拒绝关系，而是让关系不要总靠临时消耗来证明。', 'blue', 208, 340, 108, 66),
-    new CommunityNode('silence', 'metaphor', '轻复盘', '轻复盘', '匿名共享', '继续延申：情绪恢复', '不回复消息的那段空白，可能是大脑在把外界声音慢慢降下来。', 'rose', 104, 430, 108, 66)
-  ]
+  @State fragments: FragmentItem[] = SeedData.fragments()
+  private graphNodes: GraphNode[] = SeedData.graphNodes()
+  private graphEdges: GraphEdge[] = SeedData.graphEdges()
+  @State communityNodes: CommunityNode[] = SeedData.communityNodes()
+  @State communitySaveRecords: CommunitySaveRecord[] = []
+  @State echoRecords: EchoRecord[] = []
 
   aboutToAppear(): void {
+    this.initializePersistence()
     setInterval(() => {
       this.boxFloatY = 0
     }, 3200)
+  }
+
+  private async initializePersistence(): Promise<void> {
+    try {
+      let context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext
+      let snapshot: AppDataSnapshot = await this.viewModel.initialize(
+        context,
+        SeedData.fragments(),
+        SeedData.relations()
+      )
+      this.fragments = snapshot.fragments
+      this.archivedFragments = snapshot.archivedFragments
+      this.fragmentRelations = snapshot.relations
+      this.echoRecords = snapshot.echoRecords
+      this.communitySaveRecords = snapshot.communitySaveRecords
+      this.showPrivacyExplainer = snapshot.shouldShowPrivacyExplainer
+      this.hydrateCommunitySaveState()
+      this.hydrateDynamicGraph()
+      if (!this.selectFragmentById(this.activeFragmentId) && this.fragments.length > 0) {
+        this.selectFragmentById(this.fragments[0].id)
+      }
+      this.databaseReady = true
+      await this.surfaceDailyEchoIfNeeded()
+    } catch (error) {
+      this.databaseReady = false
+      this.showNotice('本地数据加载失败，当前仅使用临时数据')
+    }
+  }
+
+  private hydrateCommunitySaveState(): void {
+    for (let i: number = 0; i < this.communityNodes.length; i++) {
+      let record: CommunitySaveRecord | null =
+        CommunityService.findSavedRecord(this.communitySaveRecords, this.communityNodes[i].key)
+      if (record !== null) {
+        this.communityNodes[i].savedFragmentId = record.savedFragmentId
+        this.communityNodes[i].savedAtTimestamp = record.savedAtTimestamp
+      }
+    }
+    this.communityNodes = this.communityNodes.slice()
+  }
+
+  private hydrateDynamicGraph(): void {
+    this.graphNodes = SeedData.graphNodes()
+    this.graphEdges = SeedData.graphEdges()
+    for (let i: number = 0; i < this.fragments.length; i++) {
+      let fragment: FragmentItem = this.fragments[i]
+      if (this.graphNodeKeyByFragmentId(fragment.id) !== 'n3' || fragment.id === 'seed-fragment-03') {
+        continue
+      }
+      let sourceId: string = RelationService.sourceFor(fragment.id, this.fragmentRelations)
+      if (sourceId.length === 0) {
+        sourceId = 'seed-fragment-03'
+      }
+      this.appendGraphNode(fragment, sourceId)
+    }
+  }
+
+  private async surfaceDailyEchoIfNeeded(): Promise<void> {
+    let candidate: EchoCandidate | null = EchoService.selectCandidate(this.fragments, this.echoRecords, Date.now())
+    if (candidate === null) {
+      return
+    }
+    let nowTimestamp: number = Date.now()
+    let record: EchoRecord = new EchoRecord(
+      IdService.create('echo', nowTimestamp),
+      candidate.fragmentId,
+      nowTimestamp,
+      0,
+      0,
+      candidate.reason
+    )
+    let result: OperationResult = await this.viewModel.surfaceEcho(record)
+    if (result.success) {
+      this.echoRecords = this.echoRecords.concat([record])
+    } else {
+      this.showNotice(result.message)
+    }
+  }
+
+  private async acknowledgePrivacyExplainer(): Promise<void> {
+    let result: OperationResult = await this.viewModel.acknowledgePrivacyExplainer()
+    if (result.success) {
+      this.showPrivacyExplainer = false
+    } else {
+      this.showNotice(result.message)
+    }
   }
 
   build() {
@@ -237,6 +179,14 @@ struct Index {
       if (this.showToast) {
         this.Toast()
       }
+
+      if (this.showPrivacyExplainer) {
+        this.PrivacyExplainer()
+      }
+
+      if (this.showLifecycleConfirm) {
+        this.LifecycleConfirm()
+      }
     }
     .width('100%')
     .height('100%')
@@ -249,7 +199,7 @@ struct Index {
       backgroundColor: '#FBFAF6'
     })
     .animation({ duration: BoxStyle.MOTION_BASE, curve: Curve.EaseOut })
-    .gesture(
+    .parallelGesture(
       PanGesture({ direction: PanDirection.Horizontal, distance: 18 })
         .onActionEnd((event: GestureEvent) => {
           this.handlePan(event.offsetX, event.offsetY)
@@ -259,7 +209,7 @@ struct Index {
 
   private currentFragment(): FragmentItem {
     if (this.fragments.length === 0) {
-      return new FragmentItem('00', '空 Box', '还没有碎片。', 'self', '通勤', false, '')
+      return new FragmentItem('empty', '空 Box', '还没有碎片。', 'self', ReminderPreference.NONE, false, '', Date.now(), '--')
     }
     return this.fragments[this.currentFragmentIndex()]
   }
@@ -293,7 +243,7 @@ struct Index {
 
   private fragmentAtOffset(delta: number): FragmentItem {
     if (this.fragments.length === 0) {
-      return new FragmentItem('00', '空 Box', '还没有碎片。', 'self', '通勤', false, '')
+      return new FragmentItem('empty', '空 Box', '还没有碎片。', 'self', ReminderPreference.NONE, false, '', Date.now(), '--')
     }
     return this.fragments[(this.currentFragmentIndex() + delta + this.fragments.length) % this.fragments.length]
   }
@@ -329,6 +279,8 @@ struct Index {
 
   private goPreviousPage(): void {
     if (this.currentPage === AppPage.COMMUNITY) {
+      this.activeCommunityKey = 'root'
+      this.expandedCommunityKeys = ['root']
       this.currentPage = AppPage.COLLECTION
       return
     }
@@ -369,11 +321,11 @@ struct Index {
       this.showNotice('先放入一张碎片，再去社区延伸')
       return false
     }
-    if (this.currentFragment().shared) {
+    if (CommunityService.canUseAsCommunityRoot(this.currentFragment())) {
       return true
     }
     for (let i: number = 0; i < this.fragments.length; i++) {
-      if (this.fragments[i].shared) {
+      if (CommunityService.canUseAsCommunityRoot(this.fragments[i])) {
         this.selectFragmentById(this.fragments[i].id)
         this.activeCommunityKey = 'root'
         this.expandedCommunityKeys = ['root']
@@ -386,85 +338,100 @@ struct Index {
   }
 
   private isEchoEligible(item: FragmentItem): boolean {
-    let now: Date = new Date()
-    let age: number = Date.now() - item.createdAtTimestamp
-    if (age < 12 * 60 * 60 * 1000) {
-      return false
-    }
-
-    let hour: number = now.getHours()
-    let weekday: number = now.getDay()
-    if (item.remind === '通勤') {
-      return weekday >= 1 && weekday <= 5 && ((hour >= 7 && hour <= 10) || (hour >= 17 && hour <= 20))
-    }
-    if (item.remind === '睡前') {
-      return hour >= 21 || hour <= 1
-    }
-    if (item.remind === '周末') {
-      return (weekday === 0 || weekday === 6) && hour >= 9 && hour <= 22
-    }
-    return false
-  }
-
-  private localCalendarDay(timestamp: number): number {
-    let date: Date = new Date(timestamp)
-    return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / (24 * 60 * 60 * 1000))
-  }
-
-  private twoDigit(value: number): string {
-    return value < 10 ? '0' + value.toString() : value.toString()
+    return EchoService.isEligible(item, this.echoRecords, Date.now())
   }
 
   private fragmentDateLabel(item: FragmentItem): string {
-    let now: Date = new Date()
-    let createdAt: Date = new Date(item.createdAtTimestamp)
-    let dayDistance: number = this.localCalendarDay(Date.now()) - this.localCalendarDay(item.createdAtTimestamp)
-    if (dayDistance === 0) {
-      return '今天'
-    }
-    if (dayDistance === 1) {
-      return '昨天'
-    }
-    if (dayDistance > 1 && dayDistance <= 6) {
-      return dayDistance.toString() + ' 天前'
-    }
-
-    let monthAndDay: string = this.twoDigit(createdAt.getMonth() + 1) + '.' + this.twoDigit(createdAt.getDate())
-    if (createdAt.getFullYear() !== now.getFullYear()) {
-      return createdAt.getFullYear().toString() + '.' + monthAndDay
-    }
-    return monthAndDay
+    return DateUtils.relativeLabel(item.createdAtTimestamp)
   }
 
   private echoFragmentIndex(): number {
-    let echoIndex: number = -1
-    for (let i: number = 0; i < this.fragments.length; i++) {
-      let item: FragmentItem = this.fragments[i]
-      if (this.isEchoEligible(item) &&
-        (echoIndex < 0 || item.createdAtTimestamp < this.fragments[echoIndex].createdAtTimestamp)) {
-        echoIndex = i
+    let nowTimestamp: number = Date.now()
+    for (let i: number = 0; i < this.echoRecords.length; i++) {
+      let record: EchoRecord = this.echoRecords[i]
+      if (record.surfacedAtTimestamp > 0 &&
+        record.dismissedUntilTimestamp <= nowTimestamp &&
+        DateUtils.isSameLocalDay(record.surfacedAtTimestamp, nowTimestamp)) {
+        return this.fragmentIndexById(record.fragmentId)
       }
     }
-    return echoIndex
+    let candidate: EchoCandidate | null = EchoService.selectCandidate(this.fragments, this.echoRecords, Date.now())
+    if (candidate === null) {
+      return -1
+    }
+    return this.fragmentIndexById(candidate.fragmentId)
   }
 
   private openEchoFragment(item: FragmentItem): void {
+    this.markEchoOpened(item.id)
     this.selectFragmentById(item.id)
     this.graphMode = false
     this.currentPage = AppPage.COLLECTION
   }
 
+  private async markEchoOpened(fragmentId: string): Promise<void> {
+    for (let i: number = 0; i < this.echoRecords.length; i++) {
+      let record: EchoRecord = this.echoRecords[i]
+      if (record.fragmentId === fragmentId && record.openedAtTimestamp === 0) {
+        let result: OperationResult = await this.viewModel.openEcho(record.id)
+        if (result.success) {
+          record.openedAtTimestamp = Date.now()
+          this.echoRecords = this.echoRecords.slice()
+        } else {
+          this.showNotice(result.message)
+        }
+        return
+      }
+    }
+  }
+
+  private echoReason(fragmentId: string): string {
+    for (let i: number = 0; i < this.echoRecords.length; i++) {
+      if (this.echoRecords[i].fragmentId === fragmentId &&
+        DateUtils.isSameLocalDay(this.echoRecords[i].surfacedAtTimestamp, Date.now())) {
+        return this.echoRecords[i].reason
+      }
+    }
+    return '在合适的时刻重新看见'
+  }
+
+  private async dismissEcho(fragmentId: string): Promise<void> {
+    for (let i: number = 0; i < this.echoRecords.length; i++) {
+      let record: EchoRecord = this.echoRecords[i]
+      if (record.fragmentId === fragmentId &&
+        DateUtils.isSameLocalDay(record.surfacedAtTimestamp, Date.now())) {
+        let dismissedUntilTimestamp: number = Date.now() + DateUtils.DAY_MS
+        let result: OperationResult =
+          await this.viewModel.dismissEcho(record.id, dismissedUntilTimestamp)
+        if (result.success) {
+          record.dismissedUntilTimestamp = dismissedUntilTimestamp
+          this.echoRecords = this.echoRecords.slice()
+          this.showNotice('这张回响今天先安静一下')
+        } else {
+          this.showNotice(result.message)
+        }
+        return
+      }
+    }
+  }
+
   private openInputSheet(): void {
+    this.editingFragmentId = ''
     this.inputErrorText = ''
     this.showInputSheet = true
   }
 
   private closeInputSheet(): void {
+    this.editingFragmentId = ''
     this.inputErrorText = ''
     this.showInputSheet = false
   }
 
-  private archiveFragment(): void {
+  private saveDraftFragment(): void {
+    if (!this.databaseReady) {
+      this.showNotice('本地数据还在准备，请稍等一下')
+      return
+    }
     let content: string = this.draftContent.trim()
     if (content.length === 0) {
       this.inputErrorText = '请先写下碎片内容'
@@ -489,17 +456,183 @@ struct Index {
     }
     let previousId: string = this.currentFragment().id
     let nextId: string = this.nextFragmentId()
-    let item: FragmentItem = new FragmentItem(nextId, tag, content, 'self', this.draftRemind, this.shareEnabled, '今天')
+    let visibility: FragmentVisibility = this.shareEnabled ?
+      FragmentVisibility.COMMUNITY : FragmentVisibility.PRIVATE
+    if (this.editingFragmentId.length > 0) {
+      this.persistEditedFragment(tag, content, visibility)
+      return
+    }
+    let item: FragmentItem = new FragmentItem(
+      nextId,
+      tag,
+      content,
+      'self',
+      this.draftRemind,
+      this.shareEnabled,
+      '今天',
+      Date.now(),
+      IdService.displayCode(this.fragments.length + this.archivedFragments.length),
+      visibility
+    )
+    let relation: FragmentRelation = RelationService.create(previousId, item.id, 'created_after')
+    this.persistNewFragment(item, relation, archivedShared)
+  }
+
+  private async persistNewFragment(
+    item: FragmentItem,
+    relation: FragmentRelation,
+    archivedShared: boolean
+  ): Promise<void> {
+    let result: OperationResult = await this.viewModel.createFragment(item, relation)
+    if (!result.success) {
+      this.inputErrorText = result.message
+      this.showNotice(result.message)
+      return
+    }
     this.fragments = this.fragments.concat([item])
-    this.appendGraphNode(item, previousId)
+    this.fragmentRelations = this.fragmentRelations.concat([relation])
+    this.appendGraphNode(item, relation.fromFragmentId)
     this.selectFragmentById(item.id)
     this.draftContent = ''
     this.draftTag = ''
     this.inputErrorText = ''
-    this.shareEnabled = true
+    this.shareEnabled = false
     this.shareChoiceMade = false
     this.showInputSheet = false
     this.showNotice(archivedShared ? '已放入 Box · 匿名共享' : '已放入 Box · 仅自己可见')
+  }
+
+  private async persistEditedFragment(
+    tag: string,
+    content: string,
+    visibility: FragmentVisibility
+  ): Promise<void> {
+    let index: number = this.fragmentIndexById(this.editingFragmentId)
+    if (index < 0) {
+      this.showNotice('要编辑的碎片已经不存在')
+      return
+    }
+    let original: FragmentItem = this.fragments[index]
+    let updated: FragmentItem = new FragmentItem(
+      original.id,
+      tag,
+      content,
+      original.tone,
+      this.draftRemind,
+      visibility === FragmentVisibility.COMMUNITY,
+      original.createdAt,
+      original.createdAtTimestamp,
+      original.displayCode,
+      visibility,
+      Date.now(),
+      original.archivedAtTimestamp,
+      original.sourceCommunityNodeId,
+      original.moderationStatus
+    )
+    let result: OperationResult = await this.viewModel.updateFragment(updated)
+    if (!result.success) {
+      this.inputErrorText = result.message
+      this.showNotice(result.message)
+      return
+    }
+    let nextFragments: FragmentItem[] = this.fragments.slice()
+    nextFragments[index] = updated
+    this.fragments = nextFragments
+    this.editingFragmentId = ''
+    this.showInputSheet = false
+    this.inputErrorText = ''
+    this.showNotice(result.message)
+  }
+
+  private editFragment(item: FragmentItem): void {
+    this.editingFragmentId = item.id
+    this.draftContent = item.text
+    this.draftTag = item.tag
+    this.draftRemind = item.remind
+    this.shareEnabled = item.visibility === FragmentVisibility.COMMUNITY
+    this.shareChoiceMade = true
+    this.inputErrorText = ''
+    this.showInputSheet = true
+  }
+
+  private requestLifecycle(action: string, fragmentId: string): void {
+    this.pendingLifecycleAction = action
+    this.pendingLifecycleFragmentId = fragmentId
+    this.showLifecycleConfirm = true
+  }
+
+  private lifecycleConfirmTitle(): string {
+    if (this.pendingLifecycleAction === 'archive') {
+      return '把这张碎片移入归档箱？'
+    }
+    if (this.pendingLifecycleAction === 'restore') {
+      return '恢复这张碎片？'
+    }
+    if (this.pendingLifecycleAction === 'revoke') {
+      return '撤回这张碎片的社区共享？'
+    }
+    return '永久删除这张碎片？'
+  }
+
+  private async confirmLifecycleAction(): Promise<void> {
+    let action: string = this.pendingLifecycleAction
+    let fragmentId: string = this.pendingLifecycleFragmentId
+    this.showLifecycleConfirm = false
+    let result: OperationResult
+    if (action === 'archive') {
+      result = await this.viewModel.archiveFragment(fragmentId)
+    } else if (action === 'restore') {
+      result = await this.viewModel.restoreFragment(fragmentId)
+    } else if (action === 'revoke') {
+      result = await this.viewModel.revokeSharing(fragmentId)
+    } else {
+      result = await this.viewModel.deleteFragment(fragmentId)
+    }
+    if (!result.success) {
+      this.showNotice(result.message)
+      return
+    }
+    let snapshot: AppDataSnapshot = await this.viewModel.loadSnapshot()
+    this.fragments = snapshot.fragments
+    this.archivedFragments = snapshot.archivedFragments
+    this.fragmentRelations = snapshot.relations
+    this.communitySaveRecords = snapshot.communitySaveRecords
+    this.hydrateDynamicGraph()
+    if (this.fragments.length > 0) {
+      this.selectFragmentById(this.fragments[0].id)
+    } else {
+      this.activeFragmentId = ''
+    }
+    this.pendingLifecycleAction = ''
+    this.pendingLifecycleFragmentId = ''
+    this.showNotice(result.message)
+  }
+
+  private filteredArchivedFragments(): FragmentItem[] {
+    let keyword: string = this.fragmentSearchQuery.trim().toLowerCase()
+    if (keyword.length === 0) {
+      return this.archivedFragments
+    }
+    return this.archivedFragments.filter((item: FragmentItem) => {
+      return item.displayCode.toLowerCase().indexOf(keyword) >= 0 ||
+        item.tag.toLowerCase().indexOf(keyword) >= 0 ||
+        item.text.toLowerCase().indexOf(keyword) >= 0
+    })
+  }
+
+  private relatedFragments(): FragmentItem[] {
+    let relatedIds: string[] = RelationService.relatedFragmentIds(
+      this.currentFragment().id,
+      this.fragmentRelations
+    )
+    let related: FragmentItem[] = []
+    for (let i: number = 0; i < relatedIds.length; i++) {
+      let index: number = this.fragmentIndexById(relatedIds[i])
+      if (index >= 0) {
+        related.push(this.fragments[index])
+      }
+    }
+    return related
   }
 
   private isShareChoiceSelected(value: boolean): boolean {
@@ -507,8 +640,7 @@ struct Index {
   }
 
   private nextFragmentId(): string {
-    let value: number = this.fragments.length + 1
-    return value < 10 ? '0' + value.toString() : value.toString()
+    return IdService.create('fragment')
   }
 
   private graphNodeKeyByFragmentId(fragmentId: string): string {
@@ -532,7 +664,7 @@ struct Index {
     let sourceKey: string = this.graphNodeKeyByFragmentId(previousId)
     let node: GraphNode = new GraphNode(
       nodeKey,
-      item.id,
+      item.displayCode,
       item.tag,
       item.tone,
       70 + (fragmentNodeCount * 83) % 240,
@@ -594,7 +726,10 @@ struct Index {
         return this.communityNodes[i]
       }
     }
-    return this.communityNodes[0]
+    if (this.communityNodes.length > 0) {
+      return this.communityNodes[0]
+    }
+    return new CommunityNode('root', '', '当前碎片', '当前碎片', '我的 Box', '延申起点', '', 'root', 0, 0, 0, 0)
   }
 
   private selectCommunityNode(key: string): void {
@@ -629,26 +764,58 @@ struct Index {
   }
 
   private saveActiveCommunityFragment(): void {
+    if (!this.databaseReady) {
+      this.showNotice('本地数据还在准备，请稍等一下')
+      return
+    }
     if (this.activeCommunityKey === 'root') {
       this.showNotice('这张碎片已经在你的 Box 里')
       return
     }
 
     let node: CommunityNode = this.getCommunityNode(this.activeCommunityKey)
+    let existing: CommunitySaveRecord | null =
+      CommunityService.findSavedRecord(this.communitySaveRecords, node.key)
+    if (existing !== null || node.savedFragmentId.length > 0) {
+      this.showNotice('这条社区碎片已经收进 Box 了')
+      return
+    }
+
     let previousId: string = this.currentFragment().id
-    let item: FragmentItem = new FragmentItem(
-      this.nextFragmentId(),
-      node.tag,
-      node.text,
-      node.tone,
-      '周末',
-      false,
-      '今天'
+    let nowTimestamp: number = Date.now()
+    let item: FragmentItem = CommunityService.createPrivateCopy(
+      node,
+      IdService.displayCode(this.fragments.length + this.archivedFragments.length),
+      nowTimestamp
     )
+    let saveRecord: CommunitySaveRecord = new CommunitySaveRecord(node.key, item.id, nowTimestamp)
+    let relation: FragmentRelation = RelationService.create(previousId, item.id, 'saved_from_community', nowTimestamp)
+    this.persistCommunityCopy(node, item, relation, saveRecord)
+  }
+
+  private async persistCommunityCopy(
+    node: CommunityNode,
+    item: FragmentItem,
+    relation: FragmentRelation,
+    saveRecord: CommunitySaveRecord
+  ): Promise<void> {
+    let result: OperationResult = await this.viewModel.saveCommunityCopy(item, relation, saveRecord)
+    if (!result.success) {
+      this.showNotice(result.message)
+      return
+    }
     this.fragments = this.fragments.concat([item])
-    this.appendGraphNode(item, previousId)
+    this.fragmentRelations = this.fragmentRelations.concat([relation])
+    this.communitySaveRecords = this.communitySaveRecords.concat([saveRecord])
+    node.savedFragmentId = item.id
+    node.savedAtTimestamp = saveRecord.savedAtTimestamp
+    this.appendGraphNode(item, relation.fromFragmentId)
     this.selectFragmentById(item.id)
-    this.showNotice('已收进 Box · 仅自己可见')
+    this.currentPage = AppPage.COLLECTION
+    this.graphMode = false
+    this.activeCommunityKey = 'root'
+    this.expandedCommunityKeys = ['root']
+    this.showNotice(result.message)
   }
 
   private continueFromActiveCommunityFragment(): void {
@@ -658,8 +825,8 @@ struct Index {
     }
     this.draftContent = ''
     this.draftTag = tag
-    this.draftRemind = '周末'
-    this.shareEnabled = true
+    this.draftRemind = ReminderPreference.WEEKEND
+    this.shareEnabled = false
     this.shareChoiceMade = false
     this.inputErrorText = ''
     this.showInputSheet = true
@@ -708,7 +875,10 @@ struct Index {
         return this.graphNodes[i]
       }
     }
-    return this.graphNodes[0]
+    if (this.graphNodes.length > 0) {
+      return this.graphNodes[0]
+    }
+    return new GraphNode('empty', '', '', 'micro', 0, 0, '')
   }
 
   private isGraphEdgeActive(edge: GraphEdge): boolean {
@@ -851,7 +1021,7 @@ struct Index {
       let node: GraphNode = this.graphNodes[i]
       let dx: number = touchX - this.graphCanvasX(node, width)
       let dy: number = touchY - this.graphCanvasY(node, height)
-      if (Math.sqrt(dx * dx + dy * dy) <= this.graphNodeRadius + 8) {
+      if (Math.sqrt(dx * dx + dy * dy) <= BoxStyle.GRAPH_HIT_RADIUS) {
         this.selectGraphNode(node)
         return
       }
@@ -970,7 +1140,23 @@ struct Index {
   @Builder
   BoxEchoPanel() {
     if (this.echoFragmentIndex() >= 0) {
-      this.EchoFragmentCard(this.fragments[this.echoFragmentIndex()])
+      Column() {
+        this.EchoFragmentCard(this.fragments[this.echoFragmentIndex()])
+        Text('今天先不看')
+          .fontSize(11)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .height(30)
+          .lineHeight(30)
+          .padding({ left: 12, right: 12 })
+          .margin({ top: 6 })
+          .backgroundColor('rgba(255, 255, 255, 0.46)')
+          .borderRadius(15)
+          .onClick(() => {
+            this.dismissEcho(this.fragments[this.echoFragmentIndex()].id)
+          })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.End)
     } else {
       Row() {
         Circle()
@@ -1028,6 +1214,13 @@ struct Index {
         .lineHeight(18)
         .width('100%')
         .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(this.echoReason(item.id))
+        .fontSize(11)
+        .fontColor(BoxStyle.TEXT_MUTED)
+        .width('100%')
+        .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
@@ -1232,21 +1425,40 @@ struct Index {
           .width('100%')
         }
 
-        if (this.filteredFragments().length === 0) {
-          ListItem() {
-            Text('没有找到对应碎片，换一个关键词试试。')
-              .width('100%')
-              .height(120)
-              .fontSize(14)
-              .fontColor(BoxStyle.TEXT_MUTED)
-              .textAlign(TextAlign.Center)
+        if (this.showArchivedList) {
+          if (this.filteredArchivedFragments().length === 0) {
+            ListItem() {
+              Text($r('app.string.archive_empty'))
+                .width('100%')
+                .height(120)
+                .fontSize(14)
+                .fontColor(BoxStyle.TEXT_MUTED)
+                .textAlign(TextAlign.Center)
+            }
+          } else {
+            ForEach(this.filteredArchivedFragments(), (item: FragmentItem) => {
+              ListItem() {
+                this.ArchivedFragmentItem(item)
+              }
+            }, (item: FragmentItem) => item.id)
           }
         } else {
-          ForEach(this.filteredFragments(), (item: FragmentItem) => {
+          if (this.filteredFragments().length === 0) {
             ListItem() {
-              this.FragmentWaterfallItem(item)
+              Text('没有找到对应碎片，换一个关键词试试。')
+                .width('100%')
+                .height(120)
+                .fontSize(14)
+                .fontColor(BoxStyle.TEXT_MUTED)
+                .textAlign(TextAlign.Center)
             }
-          }, (item: FragmentItem) => item.id)
+          } else {
+            ForEach(this.filteredFragments(), (item: FragmentItem) => {
+              ListItem() {
+                this.FragmentWaterfallItem(item)
+              }
+            }, (item: FragmentItem) => item.id)
+          }
         }
 
         ListItem() {
@@ -1261,7 +1473,7 @@ struct Index {
       .layoutWeight(1)
       .scrollBar(BarState.Off)
       .onScrollIndex((firstIndex: number, lastIndex: number, centerIndex?: number) => {
-        if (this.fragmentSearchQuery.trim().length === 0) {
+        if (!this.showArchivedList && this.fragmentSearchQuery.trim().length === 0) {
           this.selectFragmentById(this.waterfallActiveFragmentId(firstIndex, lastIndex, centerIndex))
         }
       })
@@ -1284,7 +1496,7 @@ struct Index {
   WaterfallHeader() {
     Row() {
       Column() {
-        Text('我的碎片')
+        Text(this.showArchivedList ? '归档箱' : '我的碎片')
           .fontSize(30)
           .fontWeight(FontWeight.Bold)
           .fontColor('#252729')
@@ -1292,7 +1504,7 @@ struct Index {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        Text('回看最近留下的记录')
+        Text(this.showArchivedList ? '可恢复，或永久删除' : '回看最近留下的记录')
           .fontSize(12)
           .fontColor('#9a9d97')
           .margin({ top: 7 })
@@ -1301,19 +1513,35 @@ struct Index {
       }
       .layoutWeight(1)
 
-      Button('关系图')
-        .width(96)
-        .height(40)
-        .fontSize(13)
-        .fontColor('#343635')
-        .padding({ left: 0, right: 0 })
-        .backgroundColor('rgba(255, 255, 255, 0.72)')
-        .border({ width: 1, color: 'rgba(56, 58, 57, 0.08)' })
-        .borderRadius(20)
-        .shadow({ radius: 14, color: 'rgba(44, 46, 45, 0.08)', offsetX: 0, offsetY: 7 })
-        .onClick(() => {
-          this.graphMode = true
-        })
+      Row({ space: 8 }) {
+        Button(this.showArchivedList ? '返回' : '归档箱')
+          .width(74)
+          .height(40)
+          .fontSize(12)
+          .fontColor('#343635')
+          .padding({ left: 0, right: 0 })
+          .backgroundColor('rgba(255, 255, 255, 0.72)')
+          .border({ width: 1, color: 'rgba(56, 58, 57, 0.08)' })
+          .borderRadius(20)
+          .onClick(() => {
+            this.showArchivedList = !this.showArchivedList
+          })
+
+        if (!this.showArchivedList) {
+          Button('关系图')
+            .width(74)
+            .height(40)
+            .fontSize(12)
+            .fontColor('#343635')
+            .padding({ left: 0, right: 0 })
+            .backgroundColor('rgba(255, 255, 255, 0.72)')
+            .border({ width: 1, color: 'rgba(56, 58, 57, 0.08)' })
+            .borderRadius(20)
+            .onClick(() => {
+              this.graphMode = true
+            })
+        }
+      }
     }
     .width('100%')
     .justifyContent(FlexAlign.SpaceBetween)
@@ -1325,7 +1553,7 @@ struct Index {
   FragmentWaterfallItem(item: FragmentItem) {
     Column() {
       Row() {
-        Text(item.id)
+        Text(item.displayCode)
           .fontSize(item.id === this.currentFragment().id ? 68 : 56)
           .fontWeight(FontWeight.Bold)
           .fontColor(item.id === this.currentFragment().id ? BoxStyle.TEXT : '#D4D6CF')
@@ -1351,7 +1579,7 @@ struct Index {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
           Row() {
-            Text(item.shared ? '加入社区' : '仅自己可见')
+            Text(visibilityLabel(item.visibility))
               .fontSize(11)
               .fontColor(BoxStyle.TEXT_MUTED)
               .maxLines(1)
@@ -1372,13 +1600,30 @@ struct Index {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           .margin({ top: 12 })
+
+          if (item.id === this.currentFragment().id) {
+            Row({ space: 8 }) {
+              this.LifecycleTextButton('编辑', () => {
+                this.editFragment(item)
+              })
+              this.LifecycleTextButton('归档', () => {
+                this.requestLifecycle('archive', item.id)
+              })
+              if (item.visibility === FragmentVisibility.COMMUNITY) {
+                this.LifecycleTextButton('撤回共享', () => {
+                  this.requestLifecycle('revoke', item.id)
+                })
+              }
+            }
+            .margin({ top: 12 })
+          }
         }
         .layoutWeight(1)
         .padding({ left: 8, right: 4 })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
-      .height(132)
+      .height(176)
       .padding({ top: 16, bottom: 16 })
     }
     .width('100%')
@@ -1417,7 +1662,7 @@ struct Index {
     Column() {
       this.GraphHeader()
       this.GraphCard()
-
+      this.RelationList()
     }
     .width('100%')
     .height('100%')
@@ -1489,12 +1734,54 @@ struct Index {
       })
     }
     .width('100%')
-    .height(520)
+    .height(420)
     .margin({ top: 18 })
     .backgroundColor(BoxStyle.SOFT_PANEL)
     .border({ width: 1, color: 'rgba(55, 57, 56, 0.05)' })
     .borderRadius(26)
     .clip(true)
+  }
+
+  @Builder
+  RelationList() {
+    Column({ space: 8 }) {
+      Text($r('app.string.relation_list_title'))
+        .fontSize(12)
+        .fontColor(BoxStyle.TEXT_MUTED)
+        .width('100%')
+
+      if (this.relatedFragments().length === 0) {
+        Text('当前碎片还没有已保存的关系。')
+          .fontSize(13)
+          .fontColor(BoxStyle.TEXT_SOFT)
+          .width('100%')
+          .height(42)
+          .lineHeight(42)
+      } else {
+        Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap }) {
+          ForEach(this.relatedFragments().slice(0, 3), (item: FragmentItem) => {
+            Text(item.displayCode + ' · ' + item.tag)
+              .fontSize(12)
+              .fontColor(BoxStyle.TEXT_SOFT)
+              .height(34)
+              .lineHeight(34)
+              .padding({ left: 12, right: 12 })
+              .margin({ right: 8, bottom: 6 })
+              .backgroundColor('rgba(255, 255, 255, 0.68)')
+              .border({ width: 1, color: BoxStyle.HAIRLINE })
+              .borderRadius(17)
+              .onClick(() => {
+                this.selectFragmentById(item.id)
+                this.drawGraphCanvas()
+              })
+          }, (item: FragmentItem) => item.id)
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .height(88)
+    .margin({ top: 12 })
   }
 
   @Builder
@@ -1588,207 +1875,6 @@ struct Index {
   }
 
   @Builder
-  CommunityOrbitPanel() {
-    Column({ space: 14 }) {
-      Stack({ alignContent: Alignment.TopStart }) {
-        Path({ width: 312, height: 300, commands: 'M156 142 C112 104 84 72 56 70 M156 142 C178 74 214 38 260 62 M156 142 C218 134 254 104 286 122 M156 142 C204 188 224 218 262 238 M156 142 C112 184 76 210 46 242 M156 142 C146 194 152 224 176 256' })
-          .fill('rgba(255, 255, 255, 0.00)')
-          .stroke('rgba(118, 124, 116, 0.24)')
-          .strokeWidth(1.2)
-          .position({ x: 0, y: 0 })
-
-        Ellipse()
-          .width(292)
-          .height(278)
-          .fill('rgba(255, 255, 255, 0.00)')
-          .stroke('rgba(158, 163, 154, 0.32)')
-          .strokeWidth(1)
-          .position({ x: 10, y: 10 })
-
-        Ellipse()
-          .width(236)
-          .height(218)
-          .fill('rgba(255, 255, 255, 0.00)')
-          .stroke('rgba(184, 188, 180, 0.34)')
-          .strokeWidth(1)
-          .position({ x: 38, y: 42 })
-
-        Ellipse()
-          .width(168)
-          .height(154)
-          .fill('rgba(255, 255, 255, 0.00)')
-          .stroke('rgba(202, 205, 198, 0.42)')
-          .strokeWidth(1)
-          .position({ x: 72, y: 72 })
-
-        this.CommunityOrbitNode(this.getCommunityNode('similar'), 10, 54, 102, 60)
-        this.CommunityOrbitNode(this.getCommunityNode('opposite'), 112, 20, 104, 60)
-        this.CommunityOrbitNode(this.getCommunityNode('action'), 218, 84, 86, 56)
-        this.CommunityOrbitNode(this.getCommunityNode('city'), 22, 210, 98, 56)
-        this.CommunityOrbitNode(this.getCommunityNode('metaphor'), 136, 224, 104, 56)
-        this.CommunityOrbitNode(this.getCommunityNode('reply'), 216, 178, 88, 56)
-
-        this.CommunityRootNode()
-      }
-      .width('100%')
-      .height(300)
-
-      this.CommunityDetailCard()
-    }
-    .width('100%')
-    .layoutWeight(1)
-    .margin({ top: 12 })
-    .padding({ left: 14, right: 14, top: 18, bottom: 16 })
-    .backgroundColor(BoxStyle.SOFT_PANEL)
-    .border({ width: 1, color: BoxStyle.HAIRLINE })
-    .borderRadius(28)
-    .clip(true)
-  }
-
-  @Builder
-  CommunityRootNode() {
-    Column() {
-      Text(this.currentFragment().tag)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(BoxStyle.TEXT)
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Text('当前碎片')
-        .fontSize(10)
-        .fontColor(BoxStyle.TEXT_MUTED)
-        .margin({ top: 6 })
-    }
-    .width(142)
-    .height(66)
-    .padding({ left: 12, right: 12, top: 12, bottom: 10 })
-    .backgroundColor('#FFFFFF')
-    .borderRadius(22)
-    .border({ width: 1, color: 'rgba(58, 62, 58, 0.16)' })
-    .shadow({ radius: 24, color: 'rgba(43, 45, 44, 0.14)', offsetX: 0, offsetY: 10 })
-    .position({ x: 85, y: 112 })
-    .onClick(() => {
-      this.selectCommunityNode('root')
-    })
-  }
-
-  @Builder
-  CommunityOrbitNode(node: CommunityNode, x: number, y: number, w: number, h: number) {
-    Column() {
-      Text(node.title)
-        .fontSize(this.activeCommunityKey === node.key ? 12 : 11)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.activeCommunityKey === node.key ? BoxStyle.TEXT : '#626760')
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Text(node.author)
-        .fontSize(9)
-        .fontColor(BoxStyle.TEXT_MUTED)
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .margin({ top: 5 })
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width(w)
-    .height(h)
-    .padding({ left: 8, right: 8, top: 10, bottom: 8 })
-    .backgroundColor(this.activeCommunityKey === node.key ? '#FFFFFF' : 'rgba(250, 250, 246, 0.74)')
-    .borderRadius(18)
-    .border({ width: 1, color: this.activeCommunityKey === node.key ? 'rgba(62, 66, 61, 0.22)' : 'rgba(62, 66, 61, 0.08)' })
-    .shadow({ radius: this.activeCommunityKey === node.key ? 20 : 8, color: this.activeCommunityKey === node.key ? 'rgba(43, 45, 44, 0.13)' : 'rgba(43, 45, 44, 0.05)', offsetX: 0, offsetY: 7 })
-    .position({ x: x, y: y })
-    .animation({ duration: BoxStyle.MOTION_FAST, curve: Curve.EaseOut })
-    .onClick(() => {
-      this.selectCommunityNode(node.key)
-    })
-  }
-
-  @Builder
-  CommunityDetailCard() {
-    Column({ space: 7 }) {
-      Row() {
-        Text(this.activeCommunityKey === 'root' ? '我的 Box' : this.getCommunityNode(this.activeCommunityKey).author)
-          .fontSize(11)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .height(24)
-          .lineHeight(24)
-          .padding({ left: 10, right: 10 })
-          .backgroundColor('rgba(238, 239, 235, 0.92)')
-          .borderRadius(12)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Blank()
-
-        Text(this.activeCommunityKey === 'root' ? '延伸起点' : this.getCommunityNode(this.activeCommunityKey).match)
-          .fontSize(11)
-          .fontColor('#787D75')
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Text(this.activeCommunityKey === 'root' ? this.currentFragment().tag : this.getCommunityNode(this.activeCommunityKey).title)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(BoxStyle.TEXT)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-
-      Text(this.activeCommunityKey === 'root' ? this.currentFragment().text : this.getCommunityNode(this.activeCommunityKey).text)
-        .fontSize(13)
-        .fontColor(BoxStyle.TEXT_SOFT)
-        .lineHeight(20)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-
-      Row({ space: 10 }) {
-        Button('收进 Box')
-          .layoutWeight(1)
-          .height(34)
-          .fontSize(12)
-          .fontColor('#FFFFFF')
-          .padding({ left: 0, right: 0 })
-          .backgroundColor('#383B38')
-          .borderRadius(18)
-          .onClick(() => {
-            this.saveActiveCommunityFragment()
-          })
-
-        Button('继续延伸')
-          .layoutWeight(1)
-          .height(34)
-          .fontSize(12)
-          .fontColor('#454A43')
-          .padding({ left: 0, right: 0 })
-          .backgroundColor('rgba(255, 255, 255, 0.74)')
-          .border({ width: 1, color: BoxStyle.HAIRLINE })
-          .borderRadius(18)
-          .onClick(() => {
-            this.continueFromActiveCommunityFragment()
-          })
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-    .backgroundColor('rgba(255, 255, 255, 0.86)')
-    .border({ width: 1, color: 'rgba(55, 57, 55, 0.06)' })
-    .borderRadius(24)
-    .shadow({ radius: 20, color: 'rgba(44, 46, 45, 0.08)', offsetX: 0, offsetY: 9 })
-  }
-
-  @Builder
   StartFragmentSelector() {
     Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap }) {
       ForEach(this.sharedFragments(), (item: FragmentItem) => {
@@ -1802,7 +1888,7 @@ struct Index {
 
   @Builder
   StartFragmentPill(item: FragmentItem) {
-    Text(item.id + ' / ' + item.tag)
+    Text(item.displayCode + ' / ' + item.tag)
       .fontSize(12)
       .fontColor(item.id === this.currentFragment().id ? BoxStyle.TEXT : BoxStyle.TEXT_MUTED)
       .textAlign(TextAlign.Center)
@@ -1911,6 +1997,9 @@ struct Index {
 
   private getNodesByLevel(): CommunityNode[][] {
     let levels: CommunityNode[][] = []
+    if (this.communityNodes.length === 0) {
+      return levels
+    }
     let root: CommunityNode = this.communityNodes[0]
     let currentLevel: CommunityNode[] = [root]
     while (currentLevel.length > 0) {
@@ -2055,9 +2144,15 @@ struct Index {
           .width('100%')
 
         Row({ space: 12 }) {
-          ForEach(['通勤', '睡前', '周末'], (item: string) => {
+          ForEach([
+            ReminderPreference.COMMUTE,
+            ReminderPreference.BEDTIME,
+            ReminderPreference.WEEKEND,
+            ReminderPreference.NONE,
+            ReminderPreference.RANDOM
+          ], (item: ReminderPreference) => {
             this.RemindPill(item)
-          }, (item: string) => item)
+          }, (item: ReminderPreference) => item)
         }
         .width('100%')
       }
@@ -2121,7 +2216,7 @@ struct Index {
         .borderRadius(28)
         .shadow({ radius: this.shareChoiceMade ? 14 : 0, color: 'rgba(38, 40, 38, 0.12)', offsetX: 0, offsetY: 7 })
         .onClick(() => {
-          this.archiveFragment()
+          this.saveDraftFragment()
         })
     }
     .width('100%')
@@ -2130,7 +2225,7 @@ struct Index {
     .borderRadius({ topLeft: 30, topRight: 30 })
   }
   @Builder
-  RemindPill(item: string) {
+  RemindPill(item: ReminderPreference) {
     Text(item)
       .fontSize(15)
       .fontWeight(FontWeight.Medium)
@@ -2227,6 +2322,195 @@ struct Index {
       .radius(3)
       .fill(this.currentPage === page ? 'rgba(35, 38, 32, 0.74)' : 'rgba(45, 47, 46, 0.15)')
       .margin({ right: 7 })
+  }
+
+  @Builder
+  LifecycleTextButton(label: string, action: () => void) {
+    Text(label)
+      .fontSize(11)
+      .fontColor(BoxStyle.TEXT_SOFT)
+      .height(28)
+      .lineHeight(28)
+      .padding({ left: 10, right: 10 })
+      .backgroundColor('rgba(232, 233, 228, 0.82)')
+      .borderRadius(14)
+      .onClick(action)
+  }
+
+  @Builder
+  ArchivedFragmentItem(item: FragmentItem) {
+    Column({ space: 12 }) {
+      Row() {
+        Text(item.displayCode)
+          .fontSize(34)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#B6B9B2')
+          .width(66)
+
+        Column({ space: 6 }) {
+          Text(item.tag)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(BoxStyle.TEXT)
+            .width('100%')
+          Text(item.text)
+            .fontSize(14)
+            .lineHeight(21)
+            .fontColor(BoxStyle.TEXT_SOFT)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+        .layoutWeight(1)
+      }
+      .width('100%')
+
+      Row({ space: 10 }) {
+        Button('恢复')
+          .height(34)
+          .fontSize(12)
+          .fontColor(BoxStyle.TEXT)
+          .backgroundColor(BoxStyle.SELECTED_SOFT)
+          .borderRadius(17)
+          .onClick(() => {
+            this.requestLifecycle('restore', item.id)
+          })
+
+        Button('永久删除')
+          .height(34)
+          .fontSize(12)
+          .fontColor('#8F6258')
+          .backgroundColor('rgba(143, 98, 88, 0.08)')
+          .borderRadius(17)
+          .onClick(() => {
+            this.requestLifecycle('delete', item.id)
+          })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+    .backgroundColor('rgba(255, 255, 255, 0.62)')
+    .border({ width: 1, color: BoxStyle.HAIRLINE })
+    .borderRadius(24)
+    .margin({ bottom: 8 })
+  }
+
+  @Builder
+  PrivacyExplainer() {
+    Stack() {
+      Rect()
+        .width('100%')
+        .height('100%')
+        .fill('rgba(30, 32, 29, 0.34)')
+
+      Column({ space: 16 }) {
+        Text($r('app.string.privacy_explainer_title'))
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(BoxStyle.TEXT)
+          .width('100%')
+
+        Text('碎片默认仅保存在本机并仅自己可见。只有你明确选择“匿名加入社区”时，才会写入共享授权；撤回后它会立即退出社区入口。')
+          .fontSize(15)
+          .lineHeight(24)
+          .fontColor(BoxStyle.TEXT_SOFT)
+          .width('100%')
+
+        Text('当前版本没有接入真实社区服务器或大模型，社区内容为本地演示数据。')
+          .fontSize(13)
+          .lineHeight(21)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .width('100%')
+          .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+          .backgroundColor(BoxStyle.SOFT_PANEL)
+          .borderRadius(16)
+
+        Button('知道了，继续')
+          .width('100%')
+          .height(52)
+          .fontSize(16)
+          .fontColor('#FFFFFF')
+          .backgroundColor(BoxStyle.BUTTON_BG)
+          .borderRadius(26)
+          .onClick(() => {
+            this.acknowledgePrivacyExplainer()
+          })
+      }
+      .width('86%')
+      .padding({ left: 24, right: 24, top: 26, bottom: 24 })
+      .backgroundColor('#FBFAF6')
+      .borderRadius(28)
+      .shadow({ radius: 24, color: BoxStyle.SHADOW, offsetX: 0, offsetY: 12 })
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(200)
+  }
+
+  @Builder
+  LifecycleConfirm() {
+    Stack() {
+      Rect()
+        .width('100%')
+        .height('100%')
+        .fill('rgba(30, 32, 29, 0.28)')
+        .onClick(() => {
+          this.showLifecycleConfirm = false
+        })
+
+      Column({ space: 18 }) {
+        Text(this.lifecycleConfirmTitle())
+          .fontSize(19)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(BoxStyle.TEXT)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+
+        Text(this.pendingLifecycleAction === 'delete' ?
+          '永久删除后无法恢复，相关关系、回响与授权记录也会一并清理。' :
+          '操作会立即写入本地数据库，你之后仍可在归档箱或隐私设置中继续管理。')
+          .fontSize(13)
+          .lineHeight(21)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+
+        Row({ space: 12 }) {
+          Button('取消')
+            .layoutWeight(1)
+            .height(44)
+            .fontSize(14)
+            .fontColor(BoxStyle.TEXT_SOFT)
+            .backgroundColor(BoxStyle.INPUT_BG)
+            .borderRadius(22)
+            .onClick(() => {
+              this.showLifecycleConfirm = false
+            })
+
+          Button('确认')
+            .layoutWeight(1)
+            .height(44)
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+            .backgroundColor(this.pendingLifecycleAction === 'delete' ? '#8F6258' : BoxStyle.BUTTON_BG)
+            .borderRadius(22)
+            .onClick(() => {
+              this.confirmLifecycleAction()
+            })
+        }
+        .width('100%')
+      }
+      .width('82%')
+      .padding({ left: 22, right: 22, top: 24, bottom: 22 })
+      .backgroundColor('#FBFAF6')
+      .borderRadius(26)
+      .shadow({ radius: 22, color: BoxStyle.SHADOW, offsetX: 0, offsetY: 10 })
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(210)
   }
 
   @Builder
