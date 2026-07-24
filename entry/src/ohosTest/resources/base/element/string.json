@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_test_desc",
+      "value": "Fragment ArkData integration tests"
+    },
+    {
+      "name": "TestAbility_desc",
+      "value": "Runs isolated RDB migration and CRUD tests"
+    },
+    {
+      "name": "TestAbility_label",
+      "value": "Fragment RDB tests"
+    }
+  ]
+}

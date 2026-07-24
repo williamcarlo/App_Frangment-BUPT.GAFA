@@ -1,0 +1,10 @@
+packages:
+  - .
+
+allowBuilds:
+  esbuild: true
+  workerd: true
+
+# Wrangler 4.114 pins Cloudflare's generated platform types from the current SDK release.
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types'

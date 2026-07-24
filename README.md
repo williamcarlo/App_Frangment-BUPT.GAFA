@@ -2,60 +2,89 @@
 
 **2026 中国高校计算机大赛人工智能创意赛鸿蒙赛道｜应用创新项目**
 
-Fragment 是一款帮助用户接住零散想法、在未来重新遇见它们，并沿着个人与社区关系继续延申的 HarmonyOS 应用。
+Fragment 是一款帮助用户接住零散想法、在未来重新遇见它们，并沿个人与社区关系继续延申的 HarmonyOS 应用。
 
 > 把差一点消失的想法，留给未来的自己。
 
-## 核心闭环
+## 当前版本
 
-放入 Box → 等待变化 → 被重新打开 → 产生延申 → 继续放入新碎片。
+当前 `0.4.0` 是可编译的 AI 网关接入版，已实现：
 
-## 当前交互版本
+- Box 记录、Tag、五种回响偏好与显式可见范围选择；
+- Box → 个人碎片 → 社区树三屏横向导航；
+- 个人瀑布浏览、搜索、稳定 ID 选中、Canvas 关系图和文字关系列表；
+- ArkData RDB v4 持久化、幂等事务迁移与只执行一次的空库种子；
+- 碎片编辑、归档、恢复、永久删除，以及关系/回响/授权清理；
+- 通勤、睡前、周末、随机与沉睡模式；最短年龄、冷却、每日上限和稍后提醒；
+- 私密、社区、指定对象、已撤回四级可见性模型与不可覆盖的授权事件审计；
+- 社区节点收存为私密副本，稳定记录来源并阻止重复收存；
+- 首次隐私说明、共享撤回和失败提示；
+- 每张碎片单独选择是否允许“幕后整理”，未授权内容不会离开设备；
+- Cloudflare Worker 安全网关调用 DeepSeek，并使用 DashScope `text-embedding-v4` 生成 1024 维向量；
+- AI 表在 ArkData v3 引入；v4 增加授权历史、Seed 标记和单调展示编号，本机完成余弦相似度匹配和语义关系生成；
+- 提供商密钥仅保存在 Worker Secret 中，HarmonyOS 安装包不包含 DeepSeek 或 DashScope 密钥；
+- Hypium 纯函数单元测试，以及可在设备/模拟器运行的隔离 RDB 集成测试套件。
 
-本分支已经搭建 HarmonyOS Stage 模型工程，并按照交互文档、完整流程图和前端 Demo 实现三屏 MVP：
+社区节点仍是本地演示数据；当前没有真实账号、服务端社区、内容审核、跨设备同步或系统通知。AI 能力需要先部署并配置自己的网关，未配置时应用仍可完整使用本地功能。
 
-- **Box**：点击盒子记录碎片，设置 Tag、提醒偏好与匿名共享；
-- **低频回响**：按照通勤、睡前、周末窗口，只在合适时刻重新展示一张旧碎片；
-- **个人碎片轨道**：上下浏览、关键词/Tag 搜索，并缩小为个人脑洞关系图；
-- **脑洞网生长**：新写或从社区收存的碎片会生成新节点，并连接到写作前的中心碎片；
-- **社区延申树**：从当前碎片逐层展开相似、相反与行动分支；
-- **再生成闭环**：把社区节点收进 Box，或基于节点继续写一张新碎片；
-- **输入规则**：碎片内容必填，并且必须明确选择匿名共享或仅自己可见；仅公开碎片可以作为社区延申起点。
+## 支持设备
+
+当前工程配置为 **HarmonyOS phone-only**。页面尚未完成 tablet / 2in1 的响应式验收，因此没有在 `deviceTypes` 中声明这些设备。
 
 ## 工程结构
 
 ```text
-AppScope/                          应用级配置与资源
 entry/src/main/ets/
-├── entryability/EntryAbility.ets  Stage 模型入口
-└── pages/Index.ets                三屏交互、内存数据与关系规则原型
+├── components/  图谱、社区树、输入 Sheet、回响与隐私/生命周期弹窗
+├── data/        ArkData 建库、迁移、种子与 Repository
+├── model/       碎片、关系、社区、回响与授权模型
+├── service/     社区、回响和关系规则
+├── theme/       颜色、圆角、动效与图谱尺寸
+├── utils/       日期与稳定 ID
+├── viewmodel/   页面业务编排、事务和错误结果
+├── pages/       顶层页面与 ArkUI 组合
+└── entryability/
+
+ai-gateway/
+├── src/          Cloudflare Worker、鉴权、限流与提供商适配
+└── test/         请求校验、提供商和端到端处理器测试
 ```
 
-详细架构见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)，迭代计划见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
+详细说明见：
 
-## 打开方式
+- [架构](docs/ARCHITECTURE.md)
+- [数据模型](docs/DATA_MODEL.md)
+- [隐私设计](docs/PRIVACY.md)
+- [交互规格](docs/INTERACTION_SPEC.md)
+- [测试说明](docs/TESTING.md)
+- [AI 网关部署](docs/AI_GATEWAY.md)
+- [路线图](docs/ROADMAP.md)
 
-1. 使用支持 HarmonyOS Stage 模型的 DevEco Studio 打开仓库根目录；
-2. 等待 hvigor 与依赖同步；
-3. 配置本机签名；
-4. 选择 phone、tablet 或 2in1 模拟器运行 `entry` 模块。
+## 构建
 
-## 命令行构建
+使用支持 HarmonyOS Stage 模型的 DevEco Studio 打开仓库根目录，等待 OHPM 同步后选择 phone 运行 `entry`。
 
-仓库包含 Windows 与 macOS/Linux 的 Hvigor 启动脚本。运行前需安装 DevEco Studio 或 HarmonyOS 命令行工具，并配置 HarmonyOS SDK。
+Windows 命令行：
 
 ```powershell
-# Windows
+.\hvigorw.bat test --mode module -p product=default
 .\hvigorw.bat clean --mode module -p product=default assembleHap
 ```
 
+设备或模拟器上的 RDB 测试使用 `entry@ohosTest` 目标，详见
+[测试说明](docs/TESTING.md)。它会为每个用例创建独立数据库并在结束时删除。
+
+macOS / Linux：
+
 ```bash
-# macOS / Linux
+./hvigorw test --mode module -p product=default
 ./hvigorw clean --mode module -p product=default assembleHap
 ```
 
-脚本会优先使用 DevEco Studio 自带的 Hvigor。非默认安装位置可设置 `DEVECO_STUDIO_HOME`，或通过 `HVIGORW_JS` 直接指定 `tools/hvigor/bin/hvigorw.js` 的绝对路径。
+非默认 DevEco 安装位置可设置 `DEVECO_STUDIO_HOME`。工程未提交签名文件；本地未配置 `signingConfigs` 时会生成 unsigned HAP，这是预期行为。
 
-工程采用 Hvigor `modelVersion: 5.0.0`。`hvigorfile.ts` 中使用的 `@ohos/hvigor-ohos-plugin` 是该版本 Hvigor 提供的内置系统插件，因此不需要写入 `hvigor/hvigor-config.json5` 的 `dependencies`；该字段仅用于项目额外引入的自定义 Hvigor 插件。
+## 数据与隐私
 
-> 当前版本聚焦可走通的交互闭环。ArkData 持久化、系统卡片、通知调度、端侧语义关联和真实社区服务将在后续迭代接入。
+本地数据库名为 `fragment_box.db`，使用 ArkData RDB。新碎片只有在用户明确选择“匿名加入社区”后才获得社区可见性；AI 处理也必须对每张碎片单独授权。可见性每次变化都会关闭旧授权事件并写入带真实操作时间的新事件。撤回共享会把当前状态改为 `REVOKED`，社区入口立即过滤该碎片。永久删除会清理本地关系、回响、全部共享授权历史、AI 分析、向量、AI 授权和社区收存索引。展示编号由数据库单调分配，删除后不会回收。
+
+更多细节见 [PRIVACY.md](docs/PRIVACY.md)。项目采用 [Apache-2.0](LICENSE) 许可证。

@@ -6,11 +6,23 @@
     },
     {
       "name": "module_desc",
-      "value": "Fragment Box ArkUI Demo"
+      "value": "Fragment Box HarmonyOS App"
     },
     {
       "name": "entryability_desc",
       "value": "Entry ability"
+    },
+    {
+      "name": "privacy_explainer_title",
+      "value": "先说清楚，再开始记录"
+    },
+    {
+      "name": "archive_empty",
+      "value": "归档箱里还没有碎片。"
+    },
+    {
+      "name": "relation_list_title",
+      "value": "关系列表（无障碍替代视图）"
     }
   ]
 }

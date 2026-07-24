@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fragment-ai-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-25",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "vars": {
+    "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+    "DEEPSEEK_MODEL": "deepseek-v4-flash",
+    "DASHSCOPE_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "EMBEDDING_MODEL": "text-embedding-v4",
+    "EMBEDDING_DIMENSION": "1024",
+    "PROVIDER_TIMEOUT_MS": "20000",
+    "ALLOWED_ORIGIN": ""
+  },
+  "secrets": {
+    "required": [
+      "DEEPSEEK_API_KEY",
+      "DASHSCOPE_API_KEY",
+      "FRAGMENT_GATEWAY_TOKEN"
+    ]
+  },
+  "ratelimits": [
+    {
+      "name": "AI_RATE_LIMITER",
+      "namespace_id": "20260725",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    }
+  }
+}

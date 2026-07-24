@@ -1,6 +1,6 @@
 ﻿# Fragment / BOX ArkUI UI 规范
 
-> 适用范围：DevEco Studio 打开的 HarmonyOS Stage 工程 `App_Present-BUPT.GAFA`，核心页面位于 `entry/src/main/ets/pages/Index.ets`。  
+> 适用范围：DevEco Studio 打开的 HarmonyOS Stage 工程 `App_Frangment-BUPT.GAFA`，页面编排位于 `entry/src/main/ets/pages/Index.ets`。
 > 目标：后续继续改 BOX 首页、个人碎片页、个人脑洞网络、社区树状图、输入 Sheet 时，保持统一的低饱和、纸面感、轻交互风格。
 
 ---
@@ -63,7 +63,7 @@ docs/assets/ui-reference/
 
 ## 3. 全局 Design Tokens
 
-当前 ArkUI 的视觉 token 在 `Index.ets` 的 `BoxStyle` 中维护。新增组件必须优先复用这些 token，不要在组件内随意新增高饱和颜色。
+当前 ArkUI 的视觉 token 在 `entry/src/main/ets/theme/FragmentTheme.ets` 的 `BoxStyle` 中维护。新增组件必须优先复用这些 token，不要在组件内随意新增高饱和颜色。
 
 ### 3.1 颜色
 
@@ -386,7 +386,7 @@ BOX → 个人碎片集合 → 社区树状图
 
 ### 8.1 单一视觉源
 
-新增颜色、圆角、阴影前先检查 `BoxStyle`。如果是通用样式，应加到 `BoxStyle`，不要散落在组件里。
+新增颜色、圆角、阴影前先检查 `entry/src/main/ets/theme/FragmentTheme.ets` 中的 `BoxStyle`。如果是通用样式，应加到 `BoxStyle`，不要散落在组件里。
 
 ### 8.2 文本溢出
 
@@ -439,11 +439,14 @@ BOX → 个人碎片集合 → 社区树状图
 
 ## 10. 推荐后续整理
 
-当前 demo 的主要 UI 集中在 `Index.ets`。如果继续迭代，建议逐步拆分为：
+当前版本已经把模型、数据、服务、视图模型、主题和工具从 `Index.ets` 拆出。后续如继续迭代，可进一步拆分页面级 ArkUI 组件：
 
 ```text
-entry/src/main/ets/style/BoxStyle.ets
-entry/src/main/ets/model/FragmentModels.ets
+entry/src/main/ets/theme/FragmentTheme.ets
+entry/src/main/ets/model/FragmentModel.ets
+entry/src/main/ets/data/FragmentRepository.ets
+entry/src/main/ets/service/EchoService.ets
+entry/src/main/ets/viewmodel/FragmentAppViewModel.ets
 entry/src/main/ets/components/BoxHome.ets
 entry/src/main/ets/components/InputSheet.ets
 entry/src/main/ets/components/FragmentCollection.ets
@@ -521,14 +524,4 @@ entry/src/main/ets/components/CommunityTree.ets
 
 ### 12.4 回退
 
-如果拼图方向不如黑盒/便签，可以恢复：
-
-```text
-D:\Users\ember\Documents\碎片\Index_before_step7B_puzzle.ets
-```
-
-如果想回到 Step 6 的原盒子版本，可以恢复：
-
-```text
-D:\Users\ember\Documents\碎片\Index_before_step7.ets
-```
+视觉方向如需回退，应使用 Git 历史中的对应提交，不依赖开发者机器上的私有备份路径。
