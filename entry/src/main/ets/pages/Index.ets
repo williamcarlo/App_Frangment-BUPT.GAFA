@@ -39,8 +39,18 @@ class FragmentItem {
   remind: string = ''
   shared: boolean = false
   createdAt: string = ''
+  createdAtTimestamp: number = 0
 
-  constructor(id: string, tag: string, text: string, tone: string, remind: string, shared: boolean, createdAt: string) {
+  constructor(
+    id: string,
+    tag: string,
+    text: string,
+    tone: string,
+    remind: string,
+    shared: boolean,
+    createdAt: string,
+    createdAtTimestamp: number = Date.now()
+  ) {
     this.id = id
     this.tag = tag
     this.text = text
@@ -48,6 +58,7 @@ class FragmentItem {
     this.remind = remind
     this.shared = shared
     this.createdAt = createdAt
+    this.createdAtTimestamp = createdAtTimestamp
   }
 }
 
@@ -158,12 +169,12 @@ struct Index {
   private graphSourceMaxY: number = 450
 
   @State fragments: FragmentItem[] = [
-    new FragmentItem('01', '通勤观察', '人在很累的时候，不是不想社交，而是不想解释自己。', 'memory', '通勤', true, '07.18'),
-    new FragmentItem('02', '复盘经验', '临时安排让我焦虑，可能是因为我需要提前准备情绪。', 'self', '睡前', false, '07.19'),
-    new FragmentItem('03', '社交边界', '我不是讨厌社交，我是讨厌临时社交。', 'self', '周末', true, '07.21'),
-    new FragmentItem('04', '灵感脑洞', '可以把人的社交状态想成电量，而不是性格。', 'idea', '睡前', true, '07.21'),
-    new FragmentItem('05', '行动方向', '以后可以提前告诉朋友：我需要一点计划感。', 'idea', '通勤', false, '07.22'),
-    new FragmentItem('06', '情绪瞬间', '不回复消息不是冷淡，有时只是系统正在降温。', 'memory', '周末', true, '07.22')
+    new FragmentItem('01', '通勤观察', '人在很累的时候，不是不想社交，而是不想解释自己。', 'memory', '通勤', true, '07.18', Date.now() - 6 * 24 * 60 * 60 * 1000),
+    new FragmentItem('02', '复盘经验', '临时安排让我焦虑，可能是因为我需要提前准备情绪。', 'self', '睡前', false, '07.19', Date.now() - 5 * 24 * 60 * 60 * 1000),
+    new FragmentItem('03', '社交边界', '我不是讨厌社交，我是讨厌临时社交。', 'self', '周末', true, '07.21', Date.now() - 3 * 24 * 60 * 60 * 1000),
+    new FragmentItem('04', '灵感脑洞', '可以把人的社交状态想成电量，而不是性格。', 'idea', '睡前', true, '07.21', Date.now() - 3 * 24 * 60 * 60 * 1000),
+    new FragmentItem('05', '行动方向', '以后可以提前告诉朋友：我需要一点计划感。', 'idea', '通勤', false, '07.22', Date.now() - 2 * 24 * 60 * 60 * 1000),
+    new FragmentItem('06', '情绪瞬间', '不回复消息不是冷淡，有时只是系统正在降温。', 'memory', '周末', true, '07.22', Date.now() - 2 * 24 * 60 * 60 * 1000)
   ]
 
   private graphNodes: GraphNode[] = [
@@ -294,6 +305,9 @@ struct Index {
       return
     }
     if (this.currentPage === AppPage.COLLECTION) {
+      if (!this.prepareCommunityEntry()) {
+        return
+      }
       this.graphMode = false
       this.currentPage = AppPage.COMMUNITY
     }
@@ -340,6 +354,71 @@ struct Index {
     })
   }
 
+  private sharedFragments(): FragmentItem[] {
+    return this.fragments.filter((item: FragmentItem) => item.shared)
+  }
+
+  private prepareCommunityEntry(): boolean {
+    if (this.fragments.length === 0) {
+      this.showNotice('先放入一张碎片，再去社区延伸')
+      return false
+    }
+    if (this.currentFragment().shared) {
+      return true
+    }
+    for (let i: number = 0; i < this.fragments.length; i++) {
+      if (this.fragments[i].shared) {
+        this.activeIndex = i
+        this.activeCommunityKey = 'root'
+        this.expandedCommunityKeys = ['root']
+        this.showNotice('已切换到一张允许匿名共享的碎片')
+        return true
+      }
+    }
+    this.showNotice('没有可共享碎片，请先在放入时选择匿名共享')
+    return false
+  }
+
+  private isEchoEligible(item: FragmentItem): boolean {
+    let now: Date = new Date()
+    let age: number = Date.now() - item.createdAtTimestamp
+    if (age < 12 * 60 * 60 * 1000) {
+      return false
+    }
+
+    let hour: number = now.getHours()
+    let weekday: number = now.getDay()
+    if (item.remind === '通勤') {
+      return weekday >= 1 && weekday <= 5 && ((hour >= 7 && hour <= 10) || (hour >= 17 && hour <= 20))
+    }
+    if (item.remind === '睡前') {
+      return hour >= 21 || hour <= 1
+    }
+    if (item.remind === '周末') {
+      return (weekday === 0 || weekday === 6) && hour >= 9 && hour <= 22
+    }
+    return false
+  }
+
+  private echoFragmentIndex(): number {
+    let echoIndex: number = -1
+    for (let i: number = 0; i < this.fragments.length; i++) {
+      let item: FragmentItem = this.fragments[i]
+      if (this.isEchoEligible(item) &&
+        (echoIndex < 0 || item.createdAtTimestamp < this.fragments[echoIndex].createdAtTimestamp)) {
+        echoIndex = i
+      }
+    }
+    return echoIndex
+  }
+
+  private openEchoFragment(item: FragmentItem): void {
+    this.activeIndex = this.fragmentIndexById(item.id)
+    this.activeGraphNodeKey = this.graphNodeKeyByFragmentIndex(this.activeIndex)
+    this.graphMode = false
+    this.currentPage = AppPage.COLLECTION
+  }
+
   private openInputSheet(): void {
     this.inputErrorText = ''
     this.showInputSheet = true
@@ -373,9 +452,11 @@ struct Index {
     if (tag.length === 0) {
       tag = '未命名碎片'
     }
+    let previousIndex: number = this.normalizedFragmentIndex(this.activeIndex)
     let nextId: string = this.nextFragmentId()
     let item: FragmentItem = new FragmentItem(nextId, tag, content, 'self', this.draftRemind, this.shareEnabled, '今天')
     this.fragments = this.fragments.concat([item])
+    this.appendGraphNode(item, previousIndex)
     this.activeIndex = this.fragments.length - 1
     this.draftContent = ''
     this.draftTag = ''
@@ -393,6 +474,42 @@ struct Index {
   private nextFragmentId(): string {
     let value: number = this.fragments.length + 1
     return value < 10 ? '0' + value.toString() : value.toString()
+  }
+
+  private graphNodeKeyByFragmentIndex(fragmentIndex: number): string {
+    for (let i: number = 0; i < this.graphNodes.length; i++) {
+      if (this.graphNodes[i].fragmentIndex === fragmentIndex) {
+        return this.graphNodes[i].key
+      }
+    }
+    return 'n3'
+  }
+
+  private appendGraphNode(item: FragmentItem, previousIndex: number): void {
+    let fragmentNodeCount: number = 0
+    for (let i: number = 0; i < this.graphNodes.length; i++) {
+      if (this.graphNodes[i].fragmentIndex >= 0) {
+        fragmentNodeCount++
+      }
+    }
+
+    let nodeKey: string = 'user-' + item.id
+    let sourceKey: string = this.graphNodeKeyByFragmentIndex(previousIndex)
+    let node: GraphNode = new GraphNode(
+      nodeKey,
+      item.id,
+      item.tag,
+      item.tone,
+      70 + (fragmentNodeCount * 83) % 240,
+      92 + (fragmentNodeCount * 109) % 330,
+      this.fragments.length - 1
+    )
+    this.graphNodes = this.graphNodes.concat([node])
+    this.graphEdges = this.graphEdges.concat([
+      new GraphEdge('user-edge-' + item.id, sourceKey, nodeKey, 'rgba(113, 151, 160, 0.26)')
+    ])
+    this.activeGraphNodeKey = nodeKey
+    this.drawGraphCanvas()
   }
 
   private showNotice(message: string): void {
@@ -483,6 +600,7 @@ struct Index {
     }
 
     let node: CommunityNode = this.getCommunityNode(this.activeCommunityKey)
+    let previousIndex: number = this.normalizedFragmentIndex(this.activeIndex)
     let item: FragmentItem = new FragmentItem(
       this.nextFragmentId(),
       node.tag,
@@ -493,6 +611,7 @@ struct Index {
       '今天'
     )
     this.fragments = this.fragments.concat([item])
+    this.appendGraphNode(item, previousIndex)
     this.activeIndex = this.fragments.length - 1
     this.showNotice('已收进 Box · 仅自己可见')
   }
@@ -802,6 +921,8 @@ struct Index {
           this.openInputSheet()
         })
 
+        this.BoxEchoPanel()
+
         Blank()
       }
       .width('100%')
@@ -810,6 +931,81 @@ struct Index {
     .width('100%')
     .height('100%')
     .padding({ left: 26, right: 26, top: 42, bottom: 88 })
+  }
+
+  @Builder
+  BoxEchoPanel() {
+    if (this.echoFragmentIndex() >= 0) {
+      this.EchoFragmentCard(this.fragments[this.echoFragmentIndex()])
+    } else {
+      Row() {
+        Circle()
+          .width(7)
+          .height(7)
+          .fill('rgba(119, 125, 118, 0.32)')
+
+        Text('旧碎片正在安静等待合适的提醒时刻')
+          .fontSize(12)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .margin({ left: 9 })
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .width('100%')
+      .height(48)
+      .justifyContent(FlexAlign.Center)
+      .margin({ top: 24 })
+    }
+  }
+
+  @Builder
+  EchoFragmentCard(item: FragmentItem) {
+    Column({ space: 8 }) {
+      Row() {
+        Text('旧碎片回响')
+          .fontSize(11)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .height(24)
+          .lineHeight(24)
+          .padding({ left: 10, right: 10 })
+          .backgroundColor('rgba(239, 240, 235, 0.92)')
+          .borderRadius(12)
+
+        Blank()
+
+        Text(item.createdAt + ' · ' + item.remind)
+          .fontSize(11)
+          .fontColor(BoxStyle.TEXT_MUTED)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Text(item.tag)
+        .fontSize(14)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(BoxStyle.TEXT)
+        .width('100%')
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      Text(item.text)
+        .fontSize(12)
+        .fontColor(BoxStyle.TEXT_SOFT)
+        .lineHeight(18)
+        .width('100%')
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 13, bottom: 13 })
+    .margin({ top: 24 })
+    .backgroundColor('rgba(255, 255, 255, 0.76)')
+    .border({ width: 1, color: BoxStyle.HAIRLINE })
+    .borderRadius(22)
+    .shadow({ radius: 18, color: BoxStyle.SHADOW_SOFT, offsetX: 0, offsetY: 8 })
+    .onClick(() => {
+      this.openEchoFragment(item)
+    })
   }
 
   @Builder
@@ -1561,7 +1757,7 @@ struct Index {
   @Builder
   StartFragmentSelector() {
     Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap }) {
-      ForEach(this.fragments, (item: FragmentItem) => {
+      ForEach(this.sharedFragments(), (item: FragmentItem) => {
         this.StartFragmentPill(item)
       }, (item: FragmentItem) => item.id)
     }
