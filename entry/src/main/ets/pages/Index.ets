@@ -1,4 +1,10 @@
 import common from '@ohos.app.ability.common'
+import { EchoCard } from '../components/EchoCard'
+import { CommunityTree } from '../components/CommunityTree'
+import { LifecycleConfirmDialog } from '../components/LifecycleConfirmDialog'
+import { PersonalGraph as PersonalGraphView } from '../components/PersonalGraph'
+import { FragmentInputSheet } from '../components/FragmentInputSheet'
+import { PrivacyExplainer } from '../components/PrivacyExplainer'
 import {
   AiGatewayResult,
   FragmentEmbedding
@@ -7,6 +13,7 @@ import { CommunityNode, CommunitySaveRecord } from '../model/CommunityModel'
 import { EchoCandidate, EchoRecord } from '../model/EchoModel'
 import {
   FragmentItem,
+  FragmentLifecycleAction,
   FragmentRelation,
   FragmentVisibility,
   ReminderPreference,
@@ -20,8 +27,11 @@ import {
   SimilarFragmentMatch
 } from '../service/AiSimilarityService'
 import { CommunityService } from '../service/CommunityService'
+import { CommunityDemoCatalog } from '../service/CommunityDemoCatalog'
 import { EchoService } from '../service/EchoService'
+import { GraphBuilderService, GraphSnapshot } from '../service/GraphBuilderService'
 import { RelationService } from '../service/RelationService'
+import { StableCommunityNodeIdService } from '../service/StableCommunityNodeIdService'
 import { AppPage, BoxStyle } from '../theme/FragmentTheme'
 import { DateUtils } from '../utils/DateUtils'
 import { IdService } from '../utils/IdService'
@@ -37,9 +47,9 @@ struct Index {
   @State currentPage: AppPage = AppPage.BOX
   @State graphMode: boolean = false
   @State showInputSheet: boolean = false
-  @State activeFragmentId: string = 'seed-fragment-03'
-  @State activeCommunityKey: string = 'root'
-  @State expandedCommunityKeys: string[] = ['root']
+  @State activeFragmentId: string = ''
+  @State activeCommunityKey: string = ''
+  @State expandedCommunityKeys: string[] = []
   @State draftContent: string = ''
   @State draftTag: string = ''
   @State draftRemind: ReminderPreference = ReminderPreference.COMMUTE
@@ -49,16 +59,15 @@ struct Index {
   @State inputErrorText: string = ''
   @State toastText: string = ''
   @State showToast: boolean = false
-  @State activeGraphNodeKey: string = 'n3'
-  @State boxFloatY: number = 0
+  @State activeGraphNodeKey: string = ''
   @State archivedFragments: FragmentItem[] = []
-  @State fragmentRelations: FragmentRelation[] = SeedData.relations()
+  @State fragmentRelations: FragmentRelation[] = []
   @State showPrivacyExplainer: boolean = false
   @State databaseReady: boolean = false
   @State editingFragmentId: string = ''
   @State showArchivedList: boolean = false
   @State showLifecycleConfirm: boolean = false
-  @State pendingLifecycleAction: string = ''
+  @State pendingLifecycleAction: FragmentLifecycleAction = FragmentLifecycleAction.NONE
   @State pendingLifecycleFragmentId: string = ''
   @State showAiSettings: boolean = false
   @State aiGatewayBaseUrl: string = ''
@@ -66,30 +75,28 @@ struct Index {
   @State aiSettingsStatus: string = ''
   @State aiProcessingEnabled: boolean = false
   @State aiRequestInFlight: boolean = false
+  @State operationInProgress: boolean = false
   @State embeddings: FragmentEmbedding[] = []
 
   private viewModel: FragmentAppViewModel = new FragmentAppViewModel()
 
-  private graphCanvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
-  private graphCanvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.graphCanvasSettings)
-  private graphNodeRadius: number = BoxStyle.GRAPH_NODE_RADIUS
-  private graphSourceMinX: number = BoxStyle.GRAPH_SOURCE_MIN_X
-  private graphSourceMaxX: number = BoxStyle.GRAPH_SOURCE_MAX_X
-  private graphSourceMinY: number = BoxStyle.GRAPH_SOURCE_MIN_Y
-  private graphSourceMaxY: number = BoxStyle.GRAPH_SOURCE_MAX_Y
-
-  @State fragments: FragmentItem[] = SeedData.fragments()
-  private graphNodes: GraphNode[] = SeedData.graphNodes()
-  private graphEdges: GraphEdge[] = SeedData.graphEdges()
-  @State communityNodes: CommunityNode[] = SeedData.communityNodes()
+  @State fragments: FragmentItem[] = []
+  private graphNodes: GraphNode[] = []
+  private graphEdges: GraphEdge[] = []
+  @State communityNodes: CommunityNode[] = []
   @State communitySaveRecords: CommunitySaveRecord[] = []
   @State echoRecords: EchoRecord[] = []
+  private toastTimer: number = -1
 
   aboutToAppear(): void {
     this.initializePersistence()
-    setInterval(() => {
-      this.boxFloatY = 0
-    }, 3200)
+  }
+
+  aboutToDisappear(): void {
+    if (this.toastTimer >= 0) {
+      clearTimeout(this.toastTimer)
+      this.toastTimer = -1
+    }
   }
 
   private async initializePersistence(): Promise<void> {
@@ -108,11 +115,11 @@ struct Index {
       this.embeddings = snapshot.embeddings
       this.aiGatewayBaseUrl = snapshot.aiGatewayBaseUrl
       this.showPrivacyExplainer = snapshot.shouldShowPrivacyExplainer
-      this.hydrateCommunitySaveState()
-      this.hydrateDynamicGraph()
       if (!this.selectFragmentById(this.activeFragmentId) && this.fragments.length > 0) {
         this.selectFragmentById(this.fragments[0].id)
       }
+      this.rebuildCommunityNodes()
+      this.hydrateDynamicGraph()
       this.databaseReady = true
       await this.surfaceDailyEchoIfNeeded()
     } catch (error) {
@@ -133,20 +140,26 @@ struct Index {
     this.communityNodes = this.communityNodes.slice()
   }
 
-  private hydrateDynamicGraph(): void {
-    this.graphNodes = SeedData.graphNodes()
-    this.graphEdges = SeedData.graphEdges()
-    for (let i: number = 0; i < this.fragments.length; i++) {
-      let fragment: FragmentItem = this.fragments[i]
-      if (this.graphNodeKeyByFragmentId(fragment.id) !== 'n3' || fragment.id === 'seed-fragment-03') {
-        continue
-      }
-      let sourceId: string = RelationService.sourceFor(fragment.id, this.fragmentRelations)
-      if (sourceId.length === 0) {
-        sourceId = 'seed-fragment-03'
-      }
-      this.appendGraphNode(fragment, sourceId)
+  private rebuildCommunityNodes(): void {
+    if (this.fragments.length === 0) {
+      this.communityNodes = []
+      this.activeCommunityKey = ''
+      this.expandedCommunityKeys = []
+      return
     }
+    this.communityNodes = CommunityDemoCatalog.nodes(this.currentFragment().id)
+    this.hydrateCommunitySaveState()
+    this.resetCommunitySelection()
+  }
+
+  private hydrateDynamicGraph(): void {
+    let graph: GraphSnapshot = GraphBuilderService.build(
+      this.fragments,
+      this.fragmentRelations
+    )
+    this.graphNodes = graph.nodes
+    this.graphEdges = graph.edges
+    this.activeGraphNodeKey = this.graphNodeKeyByFragmentId(this.activeFragmentId)
   }
 
   private async surfaceDailyEchoIfNeeded(): Promise<void> {
@@ -199,11 +212,25 @@ struct Index {
       }
 
       if (this.showPrivacyExplainer) {
-        this.PrivacyExplainer()
+        PrivacyExplainer({
+          onAcknowledge: (): void => {
+            this.acknowledgePrivacyExplainer()
+          }
+        })
       }
 
       if (this.showLifecycleConfirm) {
-        this.LifecycleConfirm()
+        LifecycleConfirmDialog({
+          title: this.lifecycleConfirmTitle(),
+          action: this.pendingLifecycleAction,
+          disabled: this.operationInProgress,
+          onCancel: (): void => {
+            this.showLifecycleConfirm = false
+          },
+          onConfirm: (): void => {
+            this.confirmLifecycleAction()
+          }
+        })
       }
 
       if (this.showAiSettings) {
@@ -214,7 +241,7 @@ struct Index {
     .height('100%')
     .backgroundColor(BoxStyle.PAGE_BG)
     .blur(this.showInputSheet ? 2 : 0)
-    .bindSheet($$this.showInputSheet, this.InputSheet(), {
+    .bindSheet($$this.showInputSheet, this.InputSheetContent(), {
       height: 720,
       showClose: false,
       dragBar: false,
@@ -231,7 +258,7 @@ struct Index {
 
   private currentFragment(): FragmentItem {
     if (this.fragments.length === 0) {
-      return new FragmentItem('empty', '空 Box', '还没有碎片。', 'self', ReminderPreference.NONE, false, '', Date.now(), '--')
+      return this.emptyFragment()
     }
     return this.fragments[this.currentFragmentIndex()]
   }
@@ -265,7 +292,7 @@ struct Index {
 
   private fragmentAtOffset(delta: number): FragmentItem {
     if (this.fragments.length === 0) {
-      return new FragmentItem('empty', '空 Box', '还没有碎片。', 'self', ReminderPreference.NONE, false, '', Date.now(), '--')
+      return this.emptyFragment()
     }
     return this.fragments[(this.currentFragmentIndex() + delta + this.fragments.length) % this.fragments.length]
   }
@@ -302,8 +329,7 @@ struct Index {
 
   private goPreviousPage(): void {
     if (this.currentPage === AppPage.COMMUNITY) {
-      this.activeCommunityKey = 'root'
-      this.expandedCommunityKeys = ['root']
+      this.resetCommunitySelection()
       this.currentPage = AppPage.COLLECTION
       return
     }
@@ -320,7 +346,7 @@ struct Index {
     }
     let nextIndex: number = (this.currentFragmentIndex() + delta + count) % count
     this.selectFragmentById(this.fragments[nextIndex].id)
-    this.activeCommunityKey = 'root'
+    this.rebuildCommunityNodes()
   }
 
   private filteredFragments(): FragmentItem[] {
@@ -345,19 +371,33 @@ struct Index {
       return false
     }
     if (CommunityService.canUseAsCommunityRoot(this.currentFragment())) {
+      this.rebuildCommunityNodes()
       return true
     }
     for (let i: number = 0; i < this.fragments.length; i++) {
       if (CommunityService.canUseAsCommunityRoot(this.fragments[i])) {
         this.selectFragmentById(this.fragments[i].id)
-        this.activeCommunityKey = 'root'
-        this.expandedCommunityKeys = ['root']
+        this.rebuildCommunityNodes()
         this.showNotice('已切换到一张允许匿名共享的碎片')
         return true
       }
     }
     this.showNotice('没有可共享碎片，请先在放入时选择匿名共享')
     return false
+  }
+
+  private emptyFragment(): FragmentItem {
+    return new FragmentItem({
+      id: 'empty',
+      displayCode: '--',
+      tag: '空 Box',
+      text: '还没有碎片。',
+      tone: 'self',
+      remind: ReminderPreference.NONE,
+      visibility: FragmentVisibility.PRIVATE,
+      createdAt: '',
+      createdAtTimestamp: Date.now()
+    })
   }
 
   private isEchoEligible(item: FragmentItem): boolean {
@@ -453,6 +493,9 @@ struct Index {
   }
 
   private saveDraftFragment(): void {
+    if (this.operationInProgress) {
+      return
+    }
     if (!this.databaseReady) {
       this.showNotice('本地数据还在准备，请稍等一下')
       return
@@ -479,7 +522,7 @@ struct Index {
     if (tag.length === 0) {
       tag = '未命名碎片'
     }
-    let previousId: string = this.currentFragment().id
+    let previousId: string = this.fragments.length > 0 ? this.currentFragment().id : ''
     let nextId: string = this.nextFragmentId()
     let visibility: FragmentVisibility = this.shareEnabled ?
       FragmentVisibility.COMMUNITY : FragmentVisibility.PRIVATE
@@ -492,48 +535,59 @@ struct Index {
       this.showNotice('幕后整理还没配好，草稿没有丢')
       return
     }
-    let item: FragmentItem = new FragmentItem(
-      nextId,
-      tag,
-      content,
-      'self',
-      this.draftRemind,
-      this.shareEnabled,
-      '今天',
-      Date.now(),
-      IdService.displayCode(this.fragments.length + this.archivedFragments.length),
-      visibility
-    )
-    let relation: FragmentRelation = RelationService.create(previousId, item.id, 'created_after')
+    let item: FragmentItem = new FragmentItem({
+      id: nextId,
+      displayCode: '',
+      tag: tag,
+      text: content,
+      tone: 'self',
+      remind: this.draftRemind,
+      visibility: visibility,
+      createdAt: '今天',
+      createdAtTimestamp: Date.now()
+    })
+    let relation: FragmentRelation | null = previousId.length > 0 ?
+      RelationService.create(previousId, item.id, 'created_after') : null
     this.persistNewFragment(item, relation, archivedShared)
   }
 
   private async persistNewFragment(
     item: FragmentItem,
-    relation: FragmentRelation,
+    relation: FragmentRelation | null,
     archivedShared: boolean
   ): Promise<void> {
-    let shouldProcessWithAi: boolean = this.aiProcessingEnabled
-    let result: OperationResult = await this.viewModel.createFragment(item, relation)
-    if (!result.success) {
-      this.inputErrorText = result.message
-      this.showNotice(result.message)
+    if (this.operationInProgress) {
       return
     }
-    this.fragments = this.fragments.concat([item])
-    this.fragmentRelations = this.fragmentRelations.concat([relation])
-    this.appendGraphNode(item, relation.fromFragmentId)
-    this.selectFragmentById(item.id)
-    this.draftContent = ''
-    this.draftTag = ''
-    this.inputErrorText = ''
-    this.shareEnabled = false
-    this.shareChoiceMade = false
-    this.aiProcessingEnabled = false
-    this.showInputSheet = false
-    this.showNotice(archivedShared ? '已放入 Box · 匿名共享' : '已放入 Box · 仅自己可见')
-    if (shouldProcessWithAi) {
-      this.processFragmentWithAi(item)
+    this.operationInProgress = true
+    let shouldProcessWithAi: boolean = this.aiProcessingEnabled
+    try {
+      let result: OperationResult = await this.viewModel.createFragment(item, relation)
+      if (!result.success) {
+        this.inputErrorText = result.message
+        this.showNotice(result.message)
+        return
+      }
+      this.fragments = this.fragments.concat([item])
+      if (relation !== null) {
+        this.fragmentRelations = this.fragmentRelations.concat([relation])
+      }
+      this.selectFragmentById(item.id)
+      this.rebuildCommunityNodes()
+      this.hydrateDynamicGraph()
+      this.draftContent = ''
+      this.draftTag = ''
+      this.inputErrorText = ''
+      this.shareEnabled = false
+      this.shareChoiceMade = false
+      this.aiProcessingEnabled = false
+      this.showInputSheet = false
+      this.showNotice(archivedShared ? '已放入 Box · 匿名共享' : '已放入 Box · 仅自己可见')
+      if (shouldProcessWithAi) {
+        this.processFragmentWithAi(item)
+      }
+    } finally {
+      this.operationInProgress = false
     }
   }
 
@@ -542,45 +596,54 @@ struct Index {
     content: string,
     visibility: FragmentVisibility
   ): Promise<void> {
+    if (this.operationInProgress) {
+      return
+    }
+    this.operationInProgress = true
     let shouldProcessWithAi: boolean = this.aiProcessingEnabled
-    let index: number = this.fragmentIndexById(this.editingFragmentId)
-    if (index < 0) {
-      this.showNotice('要编辑的碎片已经不存在')
-      return
-    }
-    let original: FragmentItem = this.fragments[index]
-    let updated: FragmentItem = new FragmentItem(
-      original.id,
-      tag,
-      content,
-      original.tone,
-      this.draftRemind,
-      visibility === FragmentVisibility.COMMUNITY,
-      original.createdAt,
-      original.createdAtTimestamp,
-      original.displayCode,
-      visibility,
-      Date.now(),
-      original.archivedAtTimestamp,
-      original.sourceCommunityNodeId,
-      original.moderationStatus
-    )
-    let result: OperationResult = await this.viewModel.updateFragment(updated)
-    if (!result.success) {
-      this.inputErrorText = result.message
+    try {
+      let index: number = this.fragmentIndexById(this.editingFragmentId)
+      if (index < 0) {
+        this.showNotice('要编辑的碎片已经不存在')
+        return
+      }
+      let original: FragmentItem = this.fragments[index]
+      let updated: FragmentItem = new FragmentItem({
+      id: original.id,
+      displayCode: original.displayCode,
+      tag: tag,
+      text: content,
+      tone: original.tone,
+      remind: this.draftRemind,
+      visibility: visibility,
+      createdAt: original.createdAt,
+      createdAtTimestamp: original.createdAtTimestamp,
+      updatedAtTimestamp: Date.now(),
+      archivedAtTimestamp: original.archivedAtTimestamp,
+      sourceCommunityNodeId: original.sourceCommunityNodeId,
+      moderationStatus: original.moderationStatus
+      })
+      let result: OperationResult = await this.viewModel.updateFragment(updated)
+      if (!result.success) {
+        this.inputErrorText = result.message
+        this.showNotice(result.message)
+        return
+      }
+      let nextFragments: FragmentItem[] = this.fragments.slice()
+      nextFragments[index] = updated
+      this.fragments = nextFragments
+      this.rebuildCommunityNodes()
+      this.hydrateDynamicGraph()
+      this.editingFragmentId = ''
+      this.showInputSheet = false
+      this.aiProcessingEnabled = false
+      this.inputErrorText = ''
       this.showNotice(result.message)
-      return
-    }
-    let nextFragments: FragmentItem[] = this.fragments.slice()
-    nextFragments[index] = updated
-    this.fragments = nextFragments
-    this.editingFragmentId = ''
-    this.showInputSheet = false
-    this.aiProcessingEnabled = false
-    this.inputErrorText = ''
-    this.showNotice(result.message)
-    if (shouldProcessWithAi) {
-      this.processFragmentWithAi(updated)
+      if (shouldProcessWithAi) {
+        this.processFragmentWithAi(updated)
+      }
+    } finally {
+      this.operationInProgress = false
     }
   }
 
@@ -596,58 +659,72 @@ struct Index {
     this.showInputSheet = true
   }
 
-  private requestLifecycle(action: string, fragmentId: string): void {
+  private requestLifecycle(action: FragmentLifecycleAction, fragmentId: string): void {
+    if (this.operationInProgress) {
+      return
+    }
     this.pendingLifecycleAction = action
     this.pendingLifecycleFragmentId = fragmentId
     this.showLifecycleConfirm = true
   }
 
   private lifecycleConfirmTitle(): string {
-    if (this.pendingLifecycleAction === 'archive') {
+    if (this.pendingLifecycleAction === FragmentLifecycleAction.ARCHIVE) {
       return '把这张碎片移入归档箱？'
     }
-    if (this.pendingLifecycleAction === 'restore') {
+    if (this.pendingLifecycleAction === FragmentLifecycleAction.RESTORE) {
       return '恢复这张碎片？'
     }
-    if (this.pendingLifecycleAction === 'revoke') {
+    if (this.pendingLifecycleAction === FragmentLifecycleAction.REVOKE) {
       return '撤回这张碎片的社区共享？'
     }
     return '永久删除这张碎片？'
   }
 
   private async confirmLifecycleAction(): Promise<void> {
-    let action: string = this.pendingLifecycleAction
-    let fragmentId: string = this.pendingLifecycleFragmentId
-    this.showLifecycleConfirm = false
-    let result: OperationResult
-    if (action === 'archive') {
-      result = await this.viewModel.archiveFragment(fragmentId)
-    } else if (action === 'restore') {
-      result = await this.viewModel.restoreFragment(fragmentId)
-    } else if (action === 'revoke') {
-      result = await this.viewModel.revokeSharing(fragmentId)
-    } else {
-      result = await this.viewModel.deleteFragment(fragmentId)
-    }
-    if (!result.success) {
-      this.showNotice(result.message)
+    if (this.operationInProgress) {
       return
     }
-    let snapshot: AppDataSnapshot = await this.viewModel.loadSnapshot()
-    this.fragments = snapshot.fragments
-    this.archivedFragments = snapshot.archivedFragments
-    this.fragmentRelations = snapshot.relations
-    this.communitySaveRecords = snapshot.communitySaveRecords
-    this.embeddings = snapshot.embeddings
-    this.hydrateDynamicGraph()
-    if (this.fragments.length > 0) {
-      this.selectFragmentById(this.fragments[0].id)
-    } else {
-      this.activeFragmentId = ''
+    this.operationInProgress = true
+    let action: FragmentLifecycleAction = this.pendingLifecycleAction
+    let fragmentId: string = this.pendingLifecycleFragmentId
+    this.showLifecycleConfirm = false
+    try {
+      let result: OperationResult
+      if (action === FragmentLifecycleAction.ARCHIVE) {
+        result = await this.viewModel.archiveFragment(fragmentId)
+      } else if (action === FragmentLifecycleAction.RESTORE) {
+        result = await this.viewModel.restoreFragment(fragmentId)
+      } else if (action === FragmentLifecycleAction.REVOKE) {
+        result = await this.viewModel.revokeSharing(fragmentId)
+      } else {
+        result = await this.viewModel.deleteFragment(fragmentId)
+      }
+      if (!result.success) {
+        this.showNotice(result.message)
+        return
+      }
+      let snapshot: AppDataSnapshot = await this.viewModel.loadSnapshot()
+      this.fragments = snapshot.fragments
+      this.archivedFragments = snapshot.archivedFragments
+      this.fragmentRelations = snapshot.relations
+      this.communitySaveRecords = snapshot.communitySaveRecords
+      this.embeddings = snapshot.embeddings
+      this.hydrateDynamicGraph()
+      if (this.fragments.length > 0) {
+        this.selectFragmentById(this.fragments[0].id)
+      } else {
+        this.activeFragmentId = ''
+      }
+      this.rebuildCommunityNodes()
+      this.pendingLifecycleAction = FragmentLifecycleAction.NONE
+      this.pendingLifecycleFragmentId = ''
+      this.showNotice(result.message)
+    } catch (error) {
+      this.showNotice('本地状态刷新失败，请稍后重试')
+    } finally {
+      this.operationInProgress = false
     }
-    this.pendingLifecycleAction = ''
-    this.pendingLifecycleFragmentId = ''
-    this.showNotice(result.message)
   }
 
   private filteredArchivedFragments(): FragmentItem[] {
@@ -675,10 +752,6 @@ struct Index {
       }
     }
     return related
-  }
-
-  private isShareChoiceSelected(value: boolean): boolean {
-    return this.shareChoiceMade && this.shareEnabled === value
   }
 
   private isAiConfigReady(): boolean {
@@ -718,6 +791,38 @@ struct Index {
       this.showNotice('幕后整理网关已就绪')
     } catch (error) {
       this.aiSettingsStatus = '连接失败，请检查网络和网关地址'
+    }
+  }
+
+  private async restoreDemoData(): Promise<void> {
+    if (this.operationInProgress || !this.databaseReady) {
+      return
+    }
+    this.operationInProgress = true
+    try {
+      let result: OperationResult = await this.viewModel.restoreDemoData(
+        SeedData.fragments(),
+        SeedData.relations()
+      )
+      if (!result.success) {
+        this.showNotice(result.message)
+        return
+      }
+      let snapshot: AppDataSnapshot = await this.viewModel.loadSnapshot()
+      this.fragments = snapshot.fragments
+      this.archivedFragments = snapshot.archivedFragments
+      this.fragmentRelations = snapshot.relations
+      this.communitySaveRecords = snapshot.communitySaveRecords
+      this.echoRecords = snapshot.echoRecords
+      this.embeddings = snapshot.embeddings
+      if (this.fragments.length > 0) {
+        this.selectFragmentById(this.fragments[0].id)
+      }
+      this.rebuildCommunityNodes()
+      this.hydrateDynamicGraph()
+      this.showNotice(result.message)
+    } finally {
+      this.operationInProgress = false
     }
   }
 
@@ -792,22 +897,21 @@ struct Index {
         fragment.remind
       )
     }
-    return new FragmentItem(
-      fragment.id,
-      tag,
-      fragment.text,
-      result.analysis.tone,
-      reminder,
-      fragment.shared,
-      fragment.createdAt,
-      fragment.createdAtTimestamp,
-      fragment.displayCode,
-      fragment.visibility,
-      Date.now(),
-      fragment.archivedAtTimestamp,
-      fragment.sourceCommunityNodeId,
-      fragment.moderationStatus
-    )
+    return new FragmentItem({
+      id: fragment.id,
+      displayCode: fragment.displayCode,
+      tag: tag,
+      text: fragment.text,
+      tone: result.analysis.tone,
+      remind: reminder,
+      visibility: fragment.visibility,
+      createdAt: fragment.createdAt,
+      createdAtTimestamp: fragment.createdAtTimestamp,
+      updatedAtTimestamp: Date.now(),
+      archivedAtTimestamp: fragment.archivedAtTimestamp,
+      sourceCommunityNodeId: fragment.sourceCommunityNodeId,
+      moderationStatus: fragment.moderationStatus
+    })
   }
 
   private nextFragmentId(): string {
@@ -820,71 +924,19 @@ struct Index {
         return this.graphNodes[i].key
       }
     }
-    return 'n3'
-  }
-
-  private appendGraphNode(item: FragmentItem, previousId: string): void {
-    let fragmentNodeCount: number = 0
-    for (let i: number = 0; i < this.graphNodes.length; i++) {
-      if (this.graphNodes[i].fragmentId.length > 0) {
-        fragmentNodeCount++
-      }
-    }
-
-    let nodeKey: string = 'user-' + item.id
-    let sourceKey: string = this.graphNodeKeyByFragmentId(previousId)
-    let node: GraphNode = new GraphNode(
-      nodeKey,
-      item.displayCode,
-      item.tag,
-      item.tone,
-      70 + (fragmentNodeCount * 83) % 240,
-      92 + (fragmentNodeCount * 109) % 330,
-      item.id
-    )
-    this.graphNodes = this.graphNodes.concat([node])
-    this.graphEdges = this.graphEdges.concat([
-      new GraphEdge('user-edge-' + item.id, sourceKey, nodeKey, 'rgba(113, 151, 160, 0.26)')
-    ])
-    this.activeGraphNodeKey = nodeKey
-    this.drawGraphCanvas()
+    return ''
   }
 
   private showNotice(message: string): void {
     this.toastText = message
     this.showToast = true
-    setTimeout(() => {
+    if (this.toastTimer >= 0) {
+      clearTimeout(this.toastTimer)
+    }
+    this.toastTimer = setTimeout(() => {
       this.showToast = false
+      this.toastTimer = -1
     }, 1500)
-  }
-
-  private getToneColor(tone: string): string {
-    if (tone === 'idea') {
-      return '#b695a5'
-    }
-    if (tone === 'memory') {
-      return '#8aa9ae'
-    }
-    if (tone === 'green') {
-      return '#8fa783'
-    }
-    if (tone === 'blue') {
-      return '#91a4b5'
-    }
-    if (tone === 'rose') {
-      return '#b08a9a'
-    }
-    if (tone === 'slate') {
-      return '#a5a8a5'
-    }
-    if (tone === 'micro') {
-      return '#a9aca8'
-    }
-    return '#91a883'
-  }
-
-  private isExpanded(key: string): boolean {
-    return this.expandedCommunityKeys.indexOf(key) >= 0
   }
 
   private childrenOf(key: string): CommunityNode[] {
@@ -900,13 +952,35 @@ struct Index {
     if (this.communityNodes.length > 0) {
       return this.communityNodes[0]
     }
-    return new CommunityNode('root', '', '当前碎片', '当前碎片', '我的 Box', '延申起点', '', 'root', 0, 0, 0, 0)
+    return new CommunityNode('', '', '当前碎片', '当前碎片', '我的 Box', '延申起点', '', 'root', 0, 0, 0, 0)
+  }
+
+  private communityRootKey(): string {
+    if (this.communityNodes.length === 0) {
+      return ''
+    }
+    return this.communityNodes[0].key
+  }
+
+  private resetCommunitySelection(): void {
+    let rootKey: string = this.communityRootKey()
+    this.activeCommunityKey = rootKey
+    this.expandedCommunityKeys = rootKey.length > 0 ? [rootKey] : []
   }
 
   private selectCommunityNode(key: string): void {
     this.activeCommunityKey = key
-    if (this.childrenOf(key).length === 0 && key !== 'root') {
-      this.communityNodes = this.communityNodes.concat(this.createCommunityBranches(key))
+    if (this.childrenOf(key).length === 0 && key !== this.communityRootKey()) {
+      let branches: CommunityNode[] = this.createCommunityBranches(key)
+      for (let i: number = 0; i < branches.length; i++) {
+        let record: CommunitySaveRecord | null =
+          CommunityService.findSavedRecord(this.communitySaveRecords, branches[i].key)
+        if (record !== null) {
+          branches[i].savedFragmentId = record.savedFragmentId
+          branches[i].savedAtTimestamp = record.savedAtTimestamp
+        }
+      }
+      this.communityNodes = this.communityNodes.concat(branches)
     }
     this.expandedCommunityKeys = this.communityPathKeys(key)
   }
@@ -919,27 +993,47 @@ struct Index {
       let node: CommunityNode = this.getCommunityNode(currentKey)
       currentKey = node.parent
     }
-    if (path.indexOf('root') < 0) {
-      path.unshift('root')
+    let rootKey: string = this.communityRootKey()
+    if (rootKey.length > 0 && path.indexOf(rootKey) < 0) {
+      path.unshift(rootKey)
     }
     return path
   }
 
   private createCommunityBranches(parentKey: string): CommunityNode[] {
-    let base: number = this.communityNodes.length + 1
     let parent: CommunityNode = this.getCommunityNode(parentKey)
+    let rootFragmentId: string = this.currentFragment().id
+    let similarText: string =
+      '换一个生活场景看，问题也许不是社交本身，而是节奏被打断。'
+    let oppositeText: string =
+      '它也许不该被马上解决，只是需要被另一种方式看见。'
     return [
-      new CommunityNode(parentKey + '-a' + base.toString(), parentKey, '相似分支', parent.tag, '匿名共享', '相似经验', '换一个生活场景看，问题也许不是社交本身，而是节奏被打断。', 'slate', 0, 0, 0, 0),
-      new CommunityNode(parentKey + '-b' + base.toString(), parentKey, '反向视角', parent.tag, 'BOXer', '相反经验', '它也许不该被马上解决，只是需要被另一种方式看见。', 'rose', 0, 0, 0, 0)
+      new CommunityNode(
+        StableCommunityNodeIdService.create(
+          rootFragmentId, parentKey, 'similar', similarText, 'anonymous'
+        ),
+        parentKey, '相似分支', parent.tag, '匿名共享', '相似经验',
+        similarText, 'slate', 0, 0, 0, 0
+      ),
+      new CommunityNode(
+        StableCommunityNodeIdService.create(
+          rootFragmentId, parentKey, 'opposite', oppositeText, 'boxer'
+        ),
+        parentKey, '反向视角', parent.tag, 'BOXer', '相反经验',
+        oppositeText, 'rose', 0, 0, 0, 0
+      )
     ]
   }
 
   private saveActiveCommunityFragment(): void {
+    if (this.operationInProgress) {
+      return
+    }
     if (!this.databaseReady) {
       this.showNotice('本地数据还在准备，请稍等一下')
       return
     }
-    if (this.activeCommunityKey === 'root') {
+    if (this.activeCommunityKey === this.communityRootKey()) {
       this.showNotice('这张碎片已经在你的 Box 里')
       return
     }
@@ -956,7 +1050,6 @@ struct Index {
     let nowTimestamp: number = Date.now()
     let item: FragmentItem = CommunityService.createPrivateCopy(
       node,
-      IdService.displayCode(this.fragments.length + this.archivedFragments.length),
       nowTimestamp
     )
     let saveRecord: CommunitySaveRecord = new CommunitySaveRecord(node.key, item.id, nowTimestamp)
@@ -970,28 +1063,36 @@ struct Index {
     relation: FragmentRelation,
     saveRecord: CommunitySaveRecord
   ): Promise<void> {
-    let result: OperationResult = await this.viewModel.saveCommunityCopy(item, relation, saveRecord)
-    if (!result.success) {
-      this.showNotice(result.message)
+    if (this.operationInProgress) {
       return
     }
-    this.fragments = this.fragments.concat([item])
-    this.fragmentRelations = this.fragmentRelations.concat([relation])
-    this.communitySaveRecords = this.communitySaveRecords.concat([saveRecord])
-    node.savedFragmentId = item.id
-    node.savedAtTimestamp = saveRecord.savedAtTimestamp
-    this.appendGraphNode(item, relation.fromFragmentId)
-    this.selectFragmentById(item.id)
-    this.currentPage = AppPage.COLLECTION
-    this.graphMode = false
-    this.activeCommunityKey = 'root'
-    this.expandedCommunityKeys = ['root']
-    this.showNotice(result.message)
+    this.operationInProgress = true
+    try {
+      let result: OperationResult =
+        await this.viewModel.saveCommunityCopy(item, relation, saveRecord)
+      if (!result.success) {
+        this.showNotice(result.message)
+        return
+      }
+      this.fragments = this.fragments.concat([item])
+      this.fragmentRelations = this.fragmentRelations.concat([relation])
+      this.communitySaveRecords = this.communitySaveRecords.concat([saveRecord])
+      node.savedFragmentId = item.id
+      node.savedAtTimestamp = saveRecord.savedAtTimestamp
+      this.selectFragmentById(item.id)
+      this.hydrateDynamicGraph()
+      this.currentPage = AppPage.COLLECTION
+      this.graphMode = false
+      this.rebuildCommunityNodes()
+      this.showNotice(result.message)
+    } finally {
+      this.operationInProgress = false
+    }
   }
 
   private continueFromActiveCommunityFragment(): void {
     let tag: string = this.currentFragment().tag
-    if (this.activeCommunityKey !== 'root') {
+    if (this.activeCommunityKey !== this.communityRootKey()) {
       tag = this.getCommunityNode(this.activeCommunityKey).tag
     }
     this.draftContent = ''
@@ -1001,90 +1102,6 @@ struct Index {
     this.shareChoiceMade = false
     this.inputErrorText = ''
     this.showInputSheet = true
-  }
-
-  private treeNodeWidth(depth: number, count: number): number {
-    if (count <= 1) {
-      return depth === 0 ? 136 : 108
-    }
-    let availableWidth: number = 306
-    let gapWidth: number = (count - 1) * 8
-    let fitWidth: number = (availableWidth - gapWidth) / count
-    let depthWidth: number = 108 - depth * 10
-    if (depthWidth < 64) {
-      depthWidth = 64
-    }
-    return Math.max(52, Math.min(depthWidth, fitWidth))
-  }
-
-  private treeNodeHeight(depth: number): number {
-    if (depth <= 0) {
-      return 66
-    }
-    if (depth === 1) {
-      return 60
-    }
-    if (depth === 2) {
-      return 54
-    }
-    return 50
-  }
-
-  private treeTitleSize(depth: number): number {
-    if (depth <= 0) {
-      return 15
-    }
-    if (depth === 1) {
-      return 13
-    }
-    return 11
-  }
-
-  private graphNodeByKey(key: string): GraphNode {
-    for (let i: number = 0; i < this.graphNodes.length; i++) {
-      if (this.graphNodes[i].key === key) {
-        return this.graphNodes[i]
-      }
-    }
-    if (this.graphNodes.length > 0) {
-      return this.graphNodes[0]
-    }
-    return new GraphNode('empty', '', '', 'micro', 0, 0, '')
-  }
-
-  private isGraphEdgeActive(edge: GraphEdge): boolean {
-    return edge.fromKey === this.activeGraphNodeKey || edge.toKey === this.activeGraphNodeKey
-  }
-
-  private isGraphNodeRelated(node: GraphNode): boolean {
-    if (node.key === this.activeGraphNodeKey) {
-      return true
-    }
-    for (let i: number = 0; i < this.graphEdges.length; i++) {
-      let edge: GraphEdge = this.graphEdges[i]
-      if ((edge.fromKey === this.activeGraphNodeKey && edge.toKey === node.key) ||
-        (edge.toKey === this.activeGraphNodeKey && edge.fromKey === node.key)) {
-        return true
-      }
-    }
-    return false
-  }
-
-  private graphNodeKeyword(node: GraphNode): string {
-    if (node.name.length > 0) {
-      return node.name
-    }
-    return '关联点'
-  }
-
-  private graphCanvasX(node: GraphNode, width: number): number {
-    let usableWidth: number = width - 56
-    return 28 + (node.x - this.graphSourceMinX) / (this.graphSourceMaxX - this.graphSourceMinX) * usableWidth
-  }
-
-  private graphCanvasY(node: GraphNode, height: number): number {
-    let usableHeight: number = height - 74
-    return 34 + (node.y - this.graphSourceMinY) / (this.graphSourceMaxY - this.graphSourceMinY) * usableHeight
   }
 
   private waterfallActiveFragmentId(firstIndex: number, lastIndex: number, centerIndex?: number): string {
@@ -1109,102 +1126,6 @@ struct Index {
       activeListIndex = this.fragments.length
     }
     return this.fragments[activeListIndex - 1].id
-  }
-
-  private drawGraphCanvas(): void {
-    let width: number = this.graphCanvasContext.width
-    let height: number = this.graphCanvasContext.height
-    if (width <= 0 || height <= 0) {
-      return
-    }
-
-    this.graphCanvasContext.clearRect(0, 0, width, height)
-    this.drawGraphCanvasEdges(width, height)
-    this.drawGraphCanvasNodes(width, height)
-    this.drawGraphCanvasLabels(width, height)
-  }
-
-  private drawGraphCanvasEdges(width: number, height: number): void {
-    for (let i: number = 0; i < this.graphEdges.length; i++) {
-      let edge: GraphEdge = this.graphEdges[i]
-      let from: GraphNode = this.graphNodeByKey(edge.fromKey)
-      let to: GraphNode = this.graphNodeByKey(edge.toKey)
-      let active: boolean = this.isGraphEdgeActive(edge)
-      let fromX: number = this.graphCanvasX(from, width)
-      let fromY: number = this.graphCanvasY(from, height)
-      let toX: number = this.graphCanvasX(to, width)
-      let toY: number = this.graphCanvasY(to, height)
-      let dx: number = toX - fromX
-      let dy: number = toY - fromY
-      let controlX: number = (fromX + toX) / 2 - dy * 0.18
-      let controlY: number = (fromY + toY) / 2 + dx * 0.18
-
-      // Draw soft graph curves first; selected relations become darker and thicker.
-      this.graphCanvasContext.beginPath()
-      this.graphCanvasContext.moveTo(fromX, fromY)
-      this.graphCanvasContext.quadraticCurveTo(controlX, controlY, toX, toY)
-      this.graphCanvasContext.strokeStyle = active ? BoxStyle.GRAPH_ACTIVE : BoxStyle.GRAPH_IDLE
-      this.graphCanvasContext.lineWidth = active ? 4 : 1.1
-      this.graphCanvasContext.stroke()
-    }
-  }
-
-  private drawGraphCanvasNodes(width: number, height: number): void {
-    for (let i: number = 0; i < this.graphNodes.length; i++) {
-      let node: GraphNode = this.graphNodes[i]
-      let related: boolean = this.isGraphNodeRelated(node)
-      this.graphCanvasContext.beginPath()
-      this.graphCanvasContext.arc(this.graphCanvasX(node, width), this.graphCanvasY(node, height), this.graphNodeRadius, 0, Math.PI * 2)
-      this.graphCanvasContext.fillStyle = node.key === this.activeGraphNodeKey ? '#3f4440' : this.getToneColor(node.tone)
-      this.graphCanvasContext.globalAlpha = related ? 0.96 : 0.34
-      this.graphCanvasContext.fill()
-      this.graphCanvasContext.globalAlpha = 1
-      if (related) {
-        this.graphCanvasContext.beginPath()
-        this.graphCanvasContext.arc(this.graphCanvasX(node, width), this.graphCanvasY(node, height), this.graphNodeRadius, 0, Math.PI * 2)
-        this.graphCanvasContext.strokeStyle = node.key === this.activeGraphNodeKey ? 'rgba(49, 53, 50, 0.72)' : 'rgba(90, 98, 91, 0.42)'
-        this.graphCanvasContext.lineWidth = node.key === this.activeGraphNodeKey ? 2.4 : 1.4
-        this.graphCanvasContext.stroke()
-      }
-    }
-  }
-
-  private drawGraphCanvasLabels(width: number, height: number): void {
-    this.graphCanvasContext.font = '13px sans-serif'
-    this.graphCanvasContext.textAlign = 'center'
-    this.graphCanvasContext.textBaseline = 'top'
-    for (let i: number = 0; i < this.graphNodes.length; i++) {
-      let node: GraphNode = this.graphNodes[i]
-      this.graphCanvasContext.fillStyle = this.isGraphNodeRelated(node) ? BoxStyle.TEXT_SOFT : BoxStyle.TEXT_MUTED
-      this.graphCanvasContext.fillText(this.graphNodeKeyword(node), this.graphCanvasX(node, width), this.graphCanvasY(node, height) + this.graphNodeRadius + 8, 76)
-    }
-  }
-
-  private handleGraphCanvasTouch(event: TouchEvent): void {
-    if (event.type !== TouchType.Down || event.touches.length === 0) {
-      return
-    }
-    let touchX: number = event.touches[0].x
-    let touchY: number = event.touches[0].y
-    let width: number = this.graphCanvasContext.width
-    let height: number = this.graphCanvasContext.height
-    for (let i: number = 0; i < this.graphNodes.length; i++) {
-      let node: GraphNode = this.graphNodes[i]
-      let dx: number = touchX - this.graphCanvasX(node, width)
-      let dy: number = touchY - this.graphCanvasY(node, height)
-      if (Math.sqrt(dx * dx + dy * dy) <= BoxStyle.GRAPH_HIT_RADIUS) {
-        this.selectGraphNode(node)
-        return
-      }
-    }
-  }
-
-  private selectGraphNode(node: GraphNode): void {
-    this.activeGraphNodeKey = node.key
-    if (node.fragmentId.length > 0) {
-      this.selectFragmentById(node.fragmentId)
-    }
-    this.drawGraphCanvas()
   }
 
   @Builder
@@ -1323,23 +1244,17 @@ struct Index {
   @Builder
   BoxEchoPanel() {
     if (this.echoFragmentIndex() >= 0) {
-      Column() {
-        this.EchoFragmentCard(this.fragments[this.echoFragmentIndex()])
-        Text('今天先不看')
-          .fontSize(11)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .height(30)
-          .lineHeight(30)
-          .padding({ left: 12, right: 12 })
-          .margin({ top: 6 })
-          .backgroundColor('rgba(255, 255, 255, 0.46)')
-          .borderRadius(15)
-          .onClick(() => {
-            this.dismissEcho(this.fragments[this.echoFragmentIndex()].id)
-          })
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.End)
+      EchoCard({
+        item: this.fragments[this.echoFragmentIndex()],
+        dateLabel: this.fragmentDateLabel(this.fragments[this.echoFragmentIndex()]),
+        reason: this.echoReason(this.fragments[this.echoFragmentIndex()].id),
+        onOpen: (): void => {
+          this.openEchoFragment(this.fragments[this.echoFragmentIndex()])
+        },
+        onDismiss: (): void => {
+          this.dismissEcho(this.fragments[this.echoFragmentIndex()].id)
+        }
+      })
     } else {
       Row() {
         Circle()
@@ -1359,63 +1274,6 @@ struct Index {
       .justifyContent(FlexAlign.Center)
       .margin({ top: 24 })
     }
-  }
-
-  @Builder
-  EchoFragmentCard(item: FragmentItem) {
-    Column({ space: 8 }) {
-      Row() {
-        Text('旧碎片回响')
-          .fontSize(11)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .height(24)
-          .lineHeight(24)
-          .padding({ left: 10, right: 10 })
-          .backgroundColor('rgba(239, 240, 235, 0.92)')
-          .borderRadius(12)
-
-        Blank()
-
-        Text(this.fragmentDateLabel(item) + ' · ' + item.remind)
-          .fontSize(11)
-          .fontColor(BoxStyle.TEXT_MUTED)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-
-      Text(item.tag)
-        .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(BoxStyle.TEXT)
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Text(item.text)
-        .fontSize(12)
-        .fontColor(BoxStyle.TEXT_SOFT)
-        .lineHeight(18)
-        .width('100%')
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Text(this.echoReason(item.id))
-        .fontSize(11)
-        .fontColor(BoxStyle.TEXT_MUTED)
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width('100%')
-    .padding({ left: 16, right: 16, top: 13, bottom: 13 })
-    .margin({ top: 24 })
-    .backgroundColor('rgba(255, 255, 255, 0.76)')
-    .border({ width: 1, color: BoxStyle.HAIRLINE })
-    .borderRadius(22)
-    .shadow({ radius: 18, color: BoxStyle.SHADOW_SOFT, offsetX: 0, offsetY: 8 })
-    .onClick(() => {
-      this.openEchoFragment(item)
-    })
   }
 
   @Builder
@@ -1790,11 +1648,11 @@ struct Index {
                 this.editFragment(item)
               })
               this.LifecycleTextButton('归档', () => {
-                this.requestLifecycle('archive', item.id)
+                this.requestLifecycle(FragmentLifecycleAction.ARCHIVE, item.id)
               })
               if (item.visibility === FragmentVisibility.COMMUNITY) {
                 this.LifecycleTextButton('撤回共享', () => {
-                  this.requestLifecycle('revoke', item.id)
+                  this.requestLifecycle(FragmentLifecycleAction.REVOKE, item.id)
                 })
               }
             }
@@ -1842,129 +1700,18 @@ struct Index {
 
   @Builder
   PersonalGraph() {
-    Column() {
-      this.GraphHeader()
-      this.GraphCard()
-      this.RelationList()
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ left: 22, right: 22, top: 34, bottom: 74 })
-  }
-
-  @Builder
-  GraphHeader() {
-    Column() {
-      Row() {
-        Text('脑洞关系网')
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .fontColor('#222425')
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Blank()
-
-        Button('返回碎片 +')
-          .width(112)
-          .height(38)
-          .fontSize(13)
-          .fontColor('#3d403d')
-          .padding({ left: 0, right: 0 })
-          .backgroundColor('rgba(255, 255, 255, 0.76)')
-          .border({ width: 1, color: 'rgba(56, 58, 57, 0.08)' })
-          .borderRadius(19)
-          .shadow({ radius: 18, color: 'rgba(44, 46, 45, 0.10)', offsetX: 0, offsetY: 8 })
-          .onClick(() => {
-            this.graphMode = false
-          })
+    PersonalGraphView({
+      nodes: this.graphNodes,
+      edges: this.graphEdges,
+      activeNodeKey: this.activeGraphNodeKey,
+      relatedFragments: this.relatedFragments(),
+      onSelectFragment: (fragmentId: string): void => {
+        this.selectFragmentById(fragmentId)
+      },
+      onClose: (): void => {
+        this.graphMode = false
       }
-      .width('100%')
-      .justifyContent(FlexAlign.SpaceBetween)
-      .alignItems(VerticalAlign.Center)
-
-      Row() {
-        Text('点击节点查看关系')
-          .fontSize(12)
-          .fontColor('#747873')
-          .height(30)
-          .lineHeight(30)
-          .padding({ left: 12, right: 12 })
-          .backgroundColor('rgba(255, 255, 255, 0.70)')
-          .border({ width: 1, color: 'rgba(56, 58, 57, 0.08)' })
-          .borderRadius(15)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      }
-      .width('100%')
-      .margin({ top: 10 })
-    }
-    .width('100%')
-  }
-
-  @Builder
-  GraphCard() {
-    Stack() {
-      Canvas(this.graphCanvasContext)
-      .width('100%')
-      .height('100%')
-      .onReady(() => {
-        this.drawGraphCanvas()
-      })
-      .onTouch((event: TouchEvent) => {
-        this.handleGraphCanvasTouch(event)
-      })
-    }
-    .width('100%')
-    .height(420)
-    .margin({ top: 18 })
-    .backgroundColor(BoxStyle.SOFT_PANEL)
-    .border({ width: 1, color: 'rgba(55, 57, 56, 0.05)' })
-    .borderRadius(26)
-    .clip(true)
-  }
-
-  @Builder
-  RelationList() {
-    Column({ space: 8 }) {
-      Text($r('app.string.relation_list_title'))
-        .fontSize(12)
-        .fontColor(BoxStyle.TEXT_MUTED)
-        .width('100%')
-
-      if (this.relatedFragments().length === 0) {
-        Text('当前碎片还没有已保存的关系。')
-          .fontSize(13)
-          .fontColor(BoxStyle.TEXT_SOFT)
-          .width('100%')
-          .height(42)
-          .lineHeight(42)
-      } else {
-        Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap }) {
-          ForEach(this.relatedFragments().slice(0, 3), (item: FragmentItem) => {
-            Text(item.displayCode + ' · ' + item.tag)
-              .fontSize(12)
-              .fontColor(BoxStyle.TEXT_SOFT)
-              .height(34)
-              .lineHeight(34)
-              .padding({ left: 12, right: 12 })
-              .margin({ right: 8, bottom: 6 })
-              .backgroundColor('rgba(255, 255, 255, 0.68)')
-              .border({ width: 1, color: BoxStyle.HAIRLINE })
-              .borderRadius(17)
-              .onClick(() => {
-                this.selectFragmentById(item.id)
-                this.drawGraphCanvas()
-              })
-          }, (item: FragmentItem) => item.id)
-        }
-        .width('100%')
-      }
-    }
-    .width('100%')
-    .height(88)
-    .margin({ top: 12 })
+    })
   }
 
   @Builder
@@ -2013,48 +1760,22 @@ struct Index {
 
   @Builder
   CommunityTreePanel() {
-    Scroll() {
-      Column({ space: 0 }) {
-        ForEach(this.getNodesByLevel(), (levelNodes: CommunityNode[], levelIndex: number) => {
-          if (levelIndex > 0) {
-            this.TreeConnector(levelNodes.length)
-          }
-          Row({ space: 6 }) {
-            ForEach(levelNodes, (node: CommunityNode) => {
-              this.TreeNodeCard(node, levelIndex, this.getTreeMaxDepth(), levelNodes.length)
-            }, (node: CommunityNode) => node.key)
-          }
-          .width('100%')
-          .height(levelIndex === 0 ? 78 : this.treeNodeHeight(levelIndex) + 12)
-          .justifyContent(levelNodes.length <= 1 ? FlexAlign.Center : FlexAlign.SpaceEvenly)
-          .alignItems(VerticalAlign.Center)
-        }, (levelNodes: CommunityNode[], levelIndex: number) => levelIndex.toString())
-
-        Text('点击末端节点，继续展开新的共享碎片')
-          .fontSize(12)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .height(42)
-          .lineHeight(42)
-          .margin({ top: 12 })
-          .backgroundColor('rgba(255, 255, 255, 0.56)')
-          .border({ width: 1, color: 'rgba(55, 57, 55, 0.05)' })
-          .borderRadius(21)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+    CommunityTree({
+      nodes: this.communityNodes,
+      activeKey: this.activeCommunityKey,
+      expandedKeys: this.expandedCommunityKeys,
+      rootTitle: this.currentFragment().tag,
+      operationInProgress: this.operationInProgress,
+      onSelect: (nodeId: string): void => {
+        this.selectCommunityNode(nodeId)
+      },
+      onSave: (): void => {
+        this.saveActiveCommunityFragment()
+      },
+      onContinue: (): void => {
+        this.continueFromActiveCommunityFragment()
       }
-      .width('100%')
-      .padding({ left: 0, right: 0, top: 26, bottom: 28 })
-    }
-    .width('100%')
-    .layoutWeight(1)
-    .margin({ top: 12 })
-    .backgroundColor('rgba(241, 242, 237, 0.90)')
-    .border({ width: 1, color: 'rgba(55, 57, 55, 0.07)' })
-    .borderRadius(28)
-    .scrollBar(BarState.Off)
-    .clip(true)
+    })
   }
 
   @Builder
@@ -2086,119 +1807,8 @@ struct Index {
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .onClick(() => {
         this.selectFragmentById(item.id)
-        this.activeCommunityKey = 'root'
-        this.expandedCommunityKeys = ['root']
+        this.rebuildCommunityNodes()
       })
-  }
-
-  // Returns the max depth (0-indexed) of the visible tree
-  private getTreeMaxDepth(): number {
-    let levels: CommunityNode[][] = this.getNodesByLevel()
-    return levels.length - 1
-  }
-
-  @Builder
-  TreeConnector(count: number) {
-    Column() {
-      Rect()
-        .width(1.2)
-        .height(24)
-        .radius(1)
-        .fill('rgba(118, 123, 116, 0.22)')
-
-      Row() {
-        Blank()
-        Rect()
-          .width(count <= 1 ? 1.2 : '58%')
-          .height(1.2)
-          .radius(1)
-          .fill('rgba(118, 123, 116, 0.18)')
-        Blank()
-      }
-      .width('100%')
-
-      Rect()
-        .width(1.2)
-        .height(22)
-        .radius(1)
-        .fill('rgba(118, 123, 116, 0.18)')
-    }
-    .width('100%')
-    .height(52)
-    .alignItems(HorizontalAlign.Center)
-  }
-
-  @Builder
-  TreeNodeCard(node: CommunityNode, depth: number, maxDepth: number, count: number) {
-    Column() {
-      Text(node.key === 'root' ? this.currentFragment().tag : node.title)
-        .fontSize(this.treeTitleSize(depth))
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.activeCommunityKey === node.key ? BoxStyle.TEXT : '#686D66')
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-      Text(node.key === 'root' ? '当前碎片' : (this.childrenOf(node.key).length > 0 ? '已展开' : '继续展开'))
-        .fontSize(depth >= 3 ? 8 : 9)
-        .fontColor(BoxStyle.TEXT_MUTED)
-        .textAlign(TextAlign.Center)
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .margin({ top: 6 })
-    }
-    .width(this.treeNodeWidth(depth, count))
-    .height(this.treeNodeHeight(depth))
-    .padding({ left: depth >= 2 ? 6 : 10, right: depth >= 2 ? 6 : 10, top: depth >= 2 ? 8 : 11, bottom: depth >= 2 ? 8 : 10 })
-    .backgroundColor(this.activeCommunityKey === node.key ? '#FFFFFF' : 'rgba(250, 250, 246, 0.74)')
-    .borderRadius(18)
-    .border({ width: 1, color: this.activeCommunityKey === node.key ? 'rgba(64, 68, 64, 0.20)' : 'rgba(55, 57, 55, 0.06)' })
-    .shadow({ radius: this.activeCommunityKey === node.key ? 18 : 4, color: this.activeCommunityKey === node.key ? 'rgba(43, 45, 44, 0.11)' : 'rgba(43, 45, 44, 0.035)', offsetX: 0, offsetY: 6 })
-    .animation({ duration: BoxStyle.MOTION_FAST, curve: Curve.EaseOut })
-    .onClick(() => {
-      this.selectCommunityNode(node.key)
-    })
-  }
-
-  private communityNodeBg(tone: string): string {
-    if (tone === 'blue') {
-      return 'rgba(141, 159, 178, 0.18)'
-    }
-    if (tone === 'green') {
-      return 'rgba(150, 164, 143, 0.18)'
-    }
-    if (tone === 'rose') {
-      return 'rgba(170, 150, 153, 0.18)'
-    }
-    if (tone === 'slate') {
-      return 'rgba(152, 155, 155, 0.18)'
-    }
-    return 'rgba(255, 255, 255, 0.82)'
-  }
-
-  private getNodesByLevel(): CommunityNode[][] {
-    let levels: CommunityNode[][] = []
-    if (this.communityNodes.length === 0) {
-      return levels
-    }
-    let root: CommunityNode = this.communityNodes[0]
-    let currentLevel: CommunityNode[] = [root]
-    while (currentLevel.length > 0) {
-      levels.push(currentLevel)
-      let nextLevel: CommunityNode[] = []
-      for (let node of currentLevel) {
-        if (this.isExpanded(node.key)) {
-          let children: CommunityNode[] = this.childrenOf(node.key)
-          for (let child of children) {
-            nextLevel.push(child)
-          }
-        }
-      }
-      currentLevel = nextLevel
-    }
-    return levels
   }
 
   @Builder
@@ -2252,285 +1862,40 @@ struct Index {
   }
 
   @Builder
-  InputSheet() {
-    Scroll() {
-      Column({ space: 20 }) {
-      // 原生半模态内容：只承载输入、Tag、提醒偏好和完成动作。
-      Row() {
-        Text('记录碎片')
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(BoxStyle.TEXT)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-        Text('×')
-          .width(42)
-          .height(42)
-          .fontSize(25)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#6C706A')
-          .textAlign(TextAlign.Center)
-          .backgroundColor('rgba(241, 241, 238, 0.86)')
-          .border({ width: 1, color: BoxStyle.HAIRLINE })
-          .borderRadius(21)
-          .onClick(() => {
-            this.closeInputSheet()
-          })
-      }
-      .width('100%')
-      .justifyContent(FlexAlign.SpaceBetween)
-      .alignItems(VerticalAlign.Center)
-
-      TextArea({ placeholder: '写下刚刚想到的内容...', text: this.draftContent })
-        .width('100%')
-        .height(138)
-        .fontSize(16)
-        .fontColor(BoxStyle.TEXT)
-        .placeholderColor('#A4A7A1')
-        .backgroundColor('rgba(243, 243, 240, 0.92)')
-        .border({ width: 1, color: 'rgba(55, 57, 55, 0.05)' })
-        .borderRadius(18)
-        .padding({ left: 18, right: 18, top: 16, bottom: 16 })
-        .onChange((value: string) => {
-          this.draftContent = value
-        })
-
-      Column({ space: 8 }) {
-        Text('标签')
-          .fontSize(13)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .fontWeight(FontWeight.Medium)
-          .width('100%')
-
-        TextInput({ placeholder: '例如：通勤观察、情绪或灵感', text: this.draftTag })
-          .width('100%')
-          .height(50)
-          .fontSize(15)
-          .fontColor(BoxStyle.TEXT)
-          .placeholderColor('#A4A7A1')
-          .backgroundColor('rgba(243, 243, 240, 0.92)')
-          .border({ width: 1, color: 'rgba(55, 57, 55, 0.05)' })
-          .borderRadius(18)
-          .padding({ left: 16, right: 16 })
-          .onChange((value: string) => {
-            this.draftTag = value
-          })
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-
-      Column({ space: 12 }) {
-        Text('何时提醒')
-          .fontSize(13)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .fontWeight(FontWeight.Medium)
-          .width('100%')
-
-        Row({ space: 12 }) {
-          ForEach([
-            ReminderPreference.COMMUTE,
-            ReminderPreference.BEDTIME,
-            ReminderPreference.WEEKEND,
-            ReminderPreference.NONE,
-            ReminderPreference.RANDOM
-          ], (item: ReminderPreference) => {
-            this.RemindPill(item)
-          }, (item: ReminderPreference) => item)
-        }
-        .width('100%')
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-
-      Column({ space: 10 }) {
-        Row() {
-          Text('幕后整理')
-            .fontSize(13)
-            .fontColor(BoxStyle.TEXT_MUTED)
-            .fontWeight(FontWeight.Medium)
-
-          Blank()
-
-          Text('每张单独授权')
-            .fontSize(11)
-            .fontColor('#7C817A')
-        }
-        .width('100%')
-
-        Row({ space: 12 }) {
-          this.AiChoicePill('允许 AI 整理', true)
-          this.AiChoicePill('仅保存在本机', false)
-        }
-        .width('100%')
-
-        Text(this.aiProcessingEnabled ?
-          '将把本张内容、标签和提醒偏好发送到你的加密网关；不会上传其他碎片。' :
-          '本张内容不会发送给 AI 服务。')
-          .fontSize(11)
-          .lineHeight(18)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .width('100%')
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-
-      Column({ space: 12 }) {
-        Row() {
-          Text('可见范围')
-            .fontSize(13)
-            .fontColor(BoxStyle.TEXT_MUTED)
-            .fontWeight(FontWeight.Medium)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-
-          Text('请选择')
-            .fontSize(11)
-            .fontColor('#7C817A')
-            .textAlign(TextAlign.Center)
-            .height(24)
-            .lineHeight(24)
-            .padding({ left: 9, right: 9 })
-            .backgroundColor('rgba(232, 233, 228, 0.82)')
-            .borderRadius(12)
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.SpaceBetween)
-        .alignItems(VerticalAlign.Center)
-
-        Row({ space: 12 }) {
-          this.ShareChoicePill('匿名加入社区', true)
-          this.ShareChoicePill('仅自己可见', false)
-        }
-        .width('100%')
-
-        if (this.inputErrorText.length > 0) {
-          Text(this.inputErrorText)
-            .fontSize(12)
-            .fontColor('#8F6258')
-            .height(24)
-            .lineHeight(24)
-            .padding({ left: 12, right: 12 })
-            .backgroundColor('rgba(143, 98, 88, 0.08)')
-            .borderRadius(12)
-            .margin({ top: 2 })
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-
-      Button(this.shareChoiceMade ? '保存碎片' : '先选择可见范围')
-        .width('100%')
-        .height(56)
-        .fontSize(17)
-        .fontWeight(FontWeight.Bold)
-        .fontColor('#FFFFFF')
-        .padding({ left: 0, right: 0 })
-        .backgroundColor(this.shareChoiceMade ? '#262826' : '#C2C4BE')
-        .borderRadius(28)
-        .shadow({ radius: this.shareChoiceMade ? 14 : 0, color: 'rgba(38, 40, 38, 0.12)', offsetX: 0, offsetY: 7 })
-        .onClick(() => {
-          this.saveDraftFragment()
-        })
-      }
-      .width('100%')
-      .padding({ left: 24, right: 24, top: 24, bottom: 34 })
-      .backgroundColor('#FFFFFF')
-      .borderRadius({ topLeft: 30, topRight: 30 })
-    }
-    .width('100%')
-    .height('100%')
-    .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring)
-  }
-  @Builder
-  RemindPill(item: ReminderPreference) {
-    Text(item)
-      .fontSize(15)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(this.draftRemind === item ? BoxStyle.SELECTED_TEXT : '#8F928C')
-      .textAlign(TextAlign.Center)
-      .height(44)
-      .lineHeight(44)
-      .layoutWeight(1)
-      .backgroundColor(this.draftRemind === item ? BoxStyle.SELECTED_SOFT : '#F1F1EE')
-      .borderRadius(22)
-      .border({ width: 0, color: '#00000000' })
-      .onClick(() => {
-        this.draftRemind = item
-      })
-  }
-
-  @Builder
-  ShareChoicePill(label: string, value: boolean) {
-    Text(label)
-      .fontSize(15)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(this.isShareChoiceSelected(value) ? '#2F322F' : '#8F928C')
-      .textAlign(TextAlign.Center)
-      .height(44)
-      .lineHeight(44)
-      .layoutWeight(1)
-      .backgroundColor(this.isShareChoiceSelected(value) ? 'rgba(226, 228, 222, 0.96)' : '#F1F1EE')
-      .border({ width: 1, color: this.isShareChoiceSelected(value) ? 'rgba(68, 72, 67, 0.16)' : 'rgba(55, 57, 55, 0.04)' })
-      .borderRadius(22)
-      .maxLines(1)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
-      .onClick(() => {
+  InputSheetContent() {
+    FragmentInputSheet({
+      draftContent: this.draftContent,
+      draftTag: this.draftTag,
+      draftRemind: this.draftRemind,
+      shareEnabled: this.shareEnabled,
+      shareChoiceMade: this.shareChoiceMade,
+      aiProcessingEnabled: this.aiProcessingEnabled,
+      inputErrorText: this.inputErrorText,
+      operationInProgress: this.operationInProgress,
+      onContentChange: (value: string): void => {
+        this.draftContent = value
+      },
+      onTagChange: (value: string): void => {
+        this.draftTag = value
+      },
+      onReminderChange: (value: ReminderPreference): void => {
+        this.draftRemind = value
+      },
+      onShareChange: (value: boolean): void => {
         this.shareEnabled = value
         this.shareChoiceMade = true
         this.inputErrorText = ''
-      })
-  }
-
-  @Builder
-  AiChoicePill(label: string, value: boolean) {
-    Text(label)
-      .fontSize(14)
-      .fontWeight(FontWeight.Medium)
-      .fontColor(this.aiProcessingEnabled === value ? '#2F322F' : '#8F928C')
-      .textAlign(TextAlign.Center)
-      .height(42)
-      .lineHeight(42)
-      .layoutWeight(1)
-      .backgroundColor(this.aiProcessingEnabled === value ?
-        'rgba(226, 228, 222, 0.96)' : '#F1F1EE')
-      .border({
-        width: 1,
-        color: this.aiProcessingEnabled === value ?
-          'rgba(68, 72, 67, 0.16)' : 'rgba(55, 57, 55, 0.04)'
-      })
-      .borderRadius(21)
-      .maxLines(1)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
-      .onClick(() => {
+      },
+      onAiProcessingChange: (value: boolean): void => {
         this.aiProcessingEnabled = value
         this.inputErrorText = ''
-      })
-  }
-
-  @Builder
-  ShareSwitch() {
-    Stack() {
-      Rect()
-        .width(48)
-        .height(28)
-        .radius(14)
-        .fill(this.shareEnabled ? '#393b3a' : '#d9dad4')
-
-      Circle()
-        .width(22)
-        .height(22)
-        .fill('#ffffff')
-        .shadow({ radius: 8, color: 'rgba(35, 36, 35, 0.12)', offsetX: 0, offsetY: 3 })
-        .position({ x: this.shareEnabled ? 23 : 3, y: 3 })
-    }
-    .width(48)
-    .height(28)
-    .onClick(() => {
-      this.shareEnabled = !this.shareEnabled
+      },
+      onClose: (): void => {
+        this.closeInputSheet()
+      },
+      onSave: (): void => {
+        this.saveDraftFragment()
+      }
     })
   }
 
@@ -2620,7 +1985,7 @@ struct Index {
           .backgroundColor(BoxStyle.SELECTED_SOFT)
           .borderRadius(17)
           .onClick(() => {
-            this.requestLifecycle('restore', item.id)
+            this.requestLifecycle(FragmentLifecycleAction.RESTORE, item.id)
           })
 
         Button('永久删除')
@@ -2630,7 +1995,7 @@ struct Index {
           .backgroundColor('rgba(143, 98, 88, 0.08)')
           .borderRadius(17)
           .onClick(() => {
-            this.requestLifecycle('delete', item.id)
+            this.requestLifecycle(FragmentLifecycleAction.DELETE, item.id)
           })
       }
       .width('100%')
@@ -2761,6 +2126,19 @@ struct Index {
           .onClick(() => {
             this.saveAndTestAiSettings()
           })
+
+        Button(this.operationInProgress ? '正在恢复…' : '恢复演示数据')
+          .width('100%')
+          .height(44)
+          .fontSize(13)
+          .fontColor(BoxStyle.TEXT_SOFT)
+          .backgroundColor(BoxStyle.INPUT_BG)
+          .border({ width: 1, color: BoxStyle.HAIRLINE })
+          .enabled(!this.operationInProgress)
+          .borderRadius(22)
+          .onClick(() => {
+            this.restoreDemoData()
+          })
       }
       .width('88%')
       .padding({ left: 22, right: 22, top: 22, bottom: 22 })
@@ -2771,122 +2149,6 @@ struct Index {
     .width('100%')
     .height('100%')
     .zIndex(220)
-  }
-
-  @Builder
-  PrivacyExplainer() {
-    Stack() {
-      Rect()
-        .width('100%')
-        .height('100%')
-        .fill('rgba(30, 32, 29, 0.34)')
-
-      Column({ space: 16 }) {
-        Text($r('app.string.privacy_explainer_title'))
-          .fontSize(22)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(BoxStyle.TEXT)
-          .width('100%')
-
-        Text('碎片默认仅保存在本机并仅自己可见。只有你明确选择“匿名加入社区”时，才会写入共享授权；撤回后它会立即退出社区入口。')
-          .fontSize(15)
-          .lineHeight(24)
-          .fontColor(BoxStyle.TEXT_SOFT)
-          .width('100%')
-
-        Text('“幕后整理”也按每张碎片单独授权：仅发送当前内容、标签和提醒偏好到你配置的加密网关。其他碎片仍留在本机，社区内容仍为本地演示数据。')
-          .fontSize(13)
-          .lineHeight(21)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .width('100%')
-          .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-          .backgroundColor(BoxStyle.SOFT_PANEL)
-          .borderRadius(16)
-
-        Button('知道了，继续')
-          .width('100%')
-          .height(52)
-          .fontSize(16)
-          .fontColor('#FFFFFF')
-          .backgroundColor(BoxStyle.BUTTON_BG)
-          .borderRadius(26)
-          .onClick(() => {
-            this.acknowledgePrivacyExplainer()
-          })
-      }
-      .width('86%')
-      .padding({ left: 24, right: 24, top: 26, bottom: 24 })
-      .backgroundColor('#FBFAF6')
-      .borderRadius(28)
-      .shadow({ radius: 24, color: BoxStyle.SHADOW, offsetX: 0, offsetY: 12 })
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(200)
-  }
-
-  @Builder
-  LifecycleConfirm() {
-    Stack() {
-      Rect()
-        .width('100%')
-        .height('100%')
-        .fill('rgba(30, 32, 29, 0.28)')
-        .onClick(() => {
-          this.showLifecycleConfirm = false
-        })
-
-      Column({ space: 18 }) {
-        Text(this.lifecycleConfirmTitle())
-          .fontSize(19)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(BoxStyle.TEXT)
-          .width('100%')
-          .textAlign(TextAlign.Center)
-
-        Text(this.pendingLifecycleAction === 'delete' ?
-          '永久删除后无法恢复，相关关系、回响与授权记录也会一并清理。' :
-          '操作会立即写入本地数据库，你之后仍可在归档箱或隐私设置中继续管理。')
-          .fontSize(13)
-          .lineHeight(21)
-          .fontColor(BoxStyle.TEXT_MUTED)
-          .width('100%')
-          .textAlign(TextAlign.Center)
-
-        Row({ space: 12 }) {
-          Button('取消')
-            .layoutWeight(1)
-            .height(44)
-            .fontSize(14)
-            .fontColor(BoxStyle.TEXT_SOFT)
-            .backgroundColor(BoxStyle.INPUT_BG)
-            .borderRadius(22)
-            .onClick(() => {
-              this.showLifecycleConfirm = false
-            })
-
-          Button('确认')
-            .layoutWeight(1)
-            .height(44)
-            .fontSize(14)
-            .fontColor('#FFFFFF')
-            .backgroundColor(this.pendingLifecycleAction === 'delete' ? '#8F6258' : BoxStyle.BUTTON_BG)
-            .borderRadius(22)
-            .onClick(() => {
-              this.confirmLifecycleAction()
-            })
-        }
-        .width('100%')
-      }
-      .width('82%')
-      .padding({ left: 22, right: 22, top: 24, bottom: 22 })
-      .backgroundColor('#FBFAF6')
-      .borderRadius(26)
-      .shadow({ radius: 22, color: BoxStyle.SHADOW, offsetX: 0, offsetY: 10 })
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(210)
   }
 
   @Builder
