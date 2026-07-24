@@ -69,16 +69,16 @@ class GraphNode {
   tone: string = ''
   x: number = 0
   y: number = 0
-  fragmentIndex: number = -1
+  fragmentId: string = ''
 
-  constructor(key: string, label: string, name: string, tone: string, x: number, y: number, fragmentIndex: number) {
+  constructor(key: string, label: string, name: string, tone: string, x: number, y: number, fragmentId: string) {
     this.key = key
     this.label = label
     this.name = name
     this.tone = tone
     this.x = x
     this.y = y
-    this.fragmentIndex = fragmentIndex
+    this.fragmentId = fragmentId
   }
 }
 
@@ -145,7 +145,7 @@ struct Index {
   @State currentPage: AppPage = AppPage.BOX
   @State graphMode: boolean = false
   @State showInputSheet: boolean = false
-  @State activeIndex: number = 2
+  @State activeFragmentId: string = '03'
   @State activeCommunityKey: string = 'root'
   @State expandedCommunityKeys: string[] = ['root']
   @State draftContent: string = ''
@@ -178,17 +178,17 @@ struct Index {
   ]
 
   private graphNodes: GraphNode[] = [
-    new GraphNode('n1', '01', '通勤观察', 'memory', 74, 132, 0),
-    new GraphNode('n2', '02', '复盘经验', 'self', 178, 92, 1),
-    new GraphNode('n3', '03', '社交边界', 'self', 184, 294, 2),
-    new GraphNode('n4', '04', '灵感脑洞', 'idea', 284, 152, 3),
-    new GraphNode('n5', '05', '行动方向', 'idea', 288, 358, 4),
-    new GraphNode('n6', '06', '情绪瞬间', 'memory', 116, 432, 5),
-    new GraphNode('m1', '', '', 'micro', 96, 256, -1),
-    new GraphNode('m2', '', '', 'micro', 134, 306, -1),
-    new GraphNode('m3', '', '', 'micro', 220, 232, -1),
-    new GraphNode('m4', '', '', 'micro', 198, 402, -1),
-    new GraphNode('m5', '', '', 'micro', 318, 264, -1)
+    new GraphNode('n1', '01', '通勤观察', 'memory', 74, 132, '01'),
+    new GraphNode('n2', '02', '复盘经验', 'self', 178, 92, '02'),
+    new GraphNode('n3', '03', '社交边界', 'self', 184, 294, '03'),
+    new GraphNode('n4', '04', '灵感脑洞', 'idea', 284, 152, '04'),
+    new GraphNode('n5', '05', '行动方向', 'idea', 288, 358, '05'),
+    new GraphNode('n6', '06', '情绪瞬间', 'memory', 116, 432, '06'),
+    new GraphNode('m1', '', '', 'micro', 96, 256, ''),
+    new GraphNode('m2', '', '', 'micro', 134, 306, ''),
+    new GraphNode('m3', '', '', 'micro', 220, 232, ''),
+    new GraphNode('m4', '', '', 'micro', 198, 402, ''),
+    new GraphNode('m5', '', '', 'micro', 318, 264, '')
   ]
 
   private graphEdges: GraphEdge[] = [
@@ -261,27 +261,41 @@ struct Index {
     if (this.fragments.length === 0) {
       return new FragmentItem('00', '空 Box', '还没有碎片。', 'self', '通勤', false, '')
     }
-    return this.fragments[this.normalizedFragmentIndex(this.activeIndex)]
+    return this.fragments[this.currentFragmentIndex()]
   }
 
-  private normalizedFragmentIndex(index: number): number {
-    if (this.fragments.length === 0) {
-      return 0
+  private fragmentIndexById(id: string): number {
+    for (let i: number = 0; i < this.fragments.length; i++) {
+      if (this.fragments[i].id === id) {
+        return i
+      }
     }
-    if (index < 0) {
-      return 0
+    return -1
+  }
+
+  private currentFragmentIndex(): number {
+    let index: number = this.fragmentIndexById(this.activeFragmentId)
+    return index >= 0 ? index : 0
+  }
+
+  private selectFragmentById(id: string): boolean {
+    if (this.fragmentIndexById(id) >= 0) {
+      this.activeFragmentId = id
+      this.activeGraphNodeKey = this.graphNodeKeyByFragmentId(id)
+      return true
     }
-    if (index >= this.fragments.length) {
-      return this.fragments.length - 1
+    if (this.fragments.length > 0) {
+      this.activeFragmentId = this.fragments[0].id
+      this.activeGraphNodeKey = this.graphNodeKeyByFragmentId(this.activeFragmentId)
     }
-    return index
+    return false
   }
 
   private fragmentAtOffset(delta: number): FragmentItem {
     if (this.fragments.length === 0) {
       return new FragmentItem('00', '空 Box', '还没有碎片。', 'self', '通勤', false, '')
     }
-    return this.fragments[(this.activeIndex + delta + this.fragments.length) % this.fragments.length]
+    return this.fragments[(this.currentFragmentIndex() + delta + this.fragments.length) % this.fragments.length]
   }
 
   // 顶层手势：横向切换三页；在个人碎片页纵向切换碎片。
@@ -329,17 +343,9 @@ struct Index {
     if (count === 0) {
       return
     }
-    this.activeIndex = (this.activeIndex + delta + count) % count
+    let nextIndex: number = (this.currentFragmentIndex() + delta + count) % count
+    this.selectFragmentById(this.fragments[nextIndex].id)
     this.activeCommunityKey = 'root'
-  }
-
-  private fragmentIndexById(id: string): number {
-    for (let i: number = 0; i < this.fragments.length; i++) {
-      if (this.fragments[i].id === id) {
-        return i
-      }
-    }
-    return this.activeIndex
   }
 
   private filteredFragments(): FragmentItem[] {
@@ -368,7 +374,7 @@ struct Index {
     }
     for (let i: number = 0; i < this.fragments.length; i++) {
       if (this.fragments[i].shared) {
-        this.activeIndex = i
+        this.selectFragmentById(this.fragments[i].id)
         this.activeCommunityKey = 'root'
         this.expandedCommunityKeys = ['root']
         this.showNotice('已切换到一张允许匿名共享的碎片')
@@ -400,6 +406,36 @@ struct Index {
     return false
   }
 
+  private localCalendarDay(timestamp: number): number {
+    let date: Date = new Date(timestamp)
+    return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / (24 * 60 * 60 * 1000))
+  }
+
+  private twoDigit(value: number): string {
+    return value < 10 ? '0' + value.toString() : value.toString()
+  }
+
+  private fragmentDateLabel(item: FragmentItem): string {
+    let now: Date = new Date()
+    let createdAt: Date = new Date(item.createdAtTimestamp)
+    let dayDistance: number = this.localCalendarDay(Date.now()) - this.localCalendarDay(item.createdAtTimestamp)
+    if (dayDistance === 0) {
+      return '今天'
+    }
+    if (dayDistance === 1) {
+      return '昨天'
+    }
+    if (dayDistance > 1 && dayDistance <= 6) {
+      return dayDistance.toString() + ' 天前'
+    }
+
+    let monthAndDay: string = this.twoDigit(createdAt.getMonth() + 1) + '.' + this.twoDigit(createdAt.getDate())
+    if (createdAt.getFullYear() !== now.getFullYear()) {
+      return createdAt.getFullYear().toString() + '.' + monthAndDay
+    }
+    return monthAndDay
+  }
+
   private echoFragmentIndex(): number {
     let echoIndex: number = -1
     for (let i: number = 0; i < this.fragments.length; i++) {
@@ -413,8 +449,7 @@ struct Index {
   }
 
   private openEchoFragment(item: FragmentItem): void {
-    this.activeIndex = this.fragmentIndexById(item.id)
-    this.activeGraphNodeKey = this.graphNodeKeyByFragmentIndex(this.activeIndex)
+    this.selectFragmentById(item.id)
     this.graphMode = false
     this.currentPage = AppPage.COLLECTION
   }
@@ -452,12 +487,12 @@ struct Index {
     if (tag.length === 0) {
       tag = '未命名碎片'
     }
-    let previousIndex: number = this.normalizedFragmentIndex(this.activeIndex)
+    let previousId: string = this.currentFragment().id
     let nextId: string = this.nextFragmentId()
     let item: FragmentItem = new FragmentItem(nextId, tag, content, 'self', this.draftRemind, this.shareEnabled, '今天')
     this.fragments = this.fragments.concat([item])
-    this.appendGraphNode(item, previousIndex)
-    this.activeIndex = this.fragments.length - 1
+    this.appendGraphNode(item, previousId)
+    this.selectFragmentById(item.id)
     this.draftContent = ''
     this.draftTag = ''
     this.inputErrorText = ''
@@ -476,25 +511,25 @@ struct Index {
     return value < 10 ? '0' + value.toString() : value.toString()
   }
 
-  private graphNodeKeyByFragmentIndex(fragmentIndex: number): string {
+  private graphNodeKeyByFragmentId(fragmentId: string): string {
     for (let i: number = 0; i < this.graphNodes.length; i++) {
-      if (this.graphNodes[i].fragmentIndex === fragmentIndex) {
+      if (this.graphNodes[i].fragmentId === fragmentId) {
         return this.graphNodes[i].key
       }
     }
     return 'n3'
   }
 
-  private appendGraphNode(item: FragmentItem, previousIndex: number): void {
+  private appendGraphNode(item: FragmentItem, previousId: string): void {
     let fragmentNodeCount: number = 0
     for (let i: number = 0; i < this.graphNodes.length; i++) {
-      if (this.graphNodes[i].fragmentIndex >= 0) {
+      if (this.graphNodes[i].fragmentId.length > 0) {
         fragmentNodeCount++
       }
     }
 
     let nodeKey: string = 'user-' + item.id
-    let sourceKey: string = this.graphNodeKeyByFragmentIndex(previousIndex)
+    let sourceKey: string = this.graphNodeKeyByFragmentId(previousId)
     let node: GraphNode = new GraphNode(
       nodeKey,
       item.id,
@@ -502,7 +537,7 @@ struct Index {
       item.tone,
       70 + (fragmentNodeCount * 83) % 240,
       92 + (fragmentNodeCount * 109) % 330,
-      this.fragments.length - 1
+      item.id
     )
     this.graphNodes = this.graphNodes.concat([node])
     this.graphEdges = this.graphEdges.concat([
@@ -600,7 +635,7 @@ struct Index {
     }
 
     let node: CommunityNode = this.getCommunityNode(this.activeCommunityKey)
-    let previousIndex: number = this.normalizedFragmentIndex(this.activeIndex)
+    let previousId: string = this.currentFragment().id
     let item: FragmentItem = new FragmentItem(
       this.nextFragmentId(),
       node.tag,
@@ -611,8 +646,8 @@ struct Index {
       '今天'
     )
     this.fragments = this.fragments.concat([item])
-    this.appendGraphNode(item, previousIndex)
-    this.activeIndex = this.fragments.length - 1
+    this.appendGraphNode(item, previousId)
+    this.selectFragmentById(item.id)
     this.showNotice('已收进 Box · 仅自己可见')
   }
 
@@ -711,9 +746,9 @@ struct Index {
     return 34 + (node.y - this.graphSourceMinY) / (this.graphSourceMaxY - this.graphSourceMinY) * usableHeight
   }
 
-  private waterfallActiveIndex(firstIndex: number, lastIndex: number, centerIndex?: number): number {
+  private waterfallActiveFragmentId(firstIndex: number, lastIndex: number, centerIndex?: number): string {
     if (this.fragments.length === 0) {
-      return 0
+      return ''
     }
 
     // List item 0 is the top spacer and real fragments start from item 1.
@@ -732,7 +767,7 @@ struct Index {
     if (activeListIndex > this.fragments.length) {
       activeListIndex = this.fragments.length
     }
-    return this.normalizedFragmentIndex(activeListIndex - 1)
+    return this.fragments[activeListIndex - 1].id
   }
 
   private drawGraphCanvas(): void {
@@ -825,8 +860,8 @@ struct Index {
 
   private selectGraphNode(node: GraphNode): void {
     this.activeGraphNodeKey = node.key
-    if (node.fragmentIndex >= 0 && node.fragmentIndex < this.fragments.length) {
-      this.activeIndex = node.fragmentIndex
+    if (node.fragmentId.length > 0) {
+      this.selectFragmentById(node.fragmentId)
     }
     this.drawGraphCanvas()
   }
@@ -973,7 +1008,7 @@ struct Index {
 
         Blank()
 
-        Text(item.createdAt + ' · ' + item.remind)
+        Text(this.fragmentDateLabel(item) + ' · ' + item.remind)
           .fontSize(11)
           .fontColor(BoxStyle.TEXT_MUTED)
       }
@@ -1239,7 +1274,7 @@ struct Index {
       .scrollBar(BarState.Off)
       .onScrollIndex((firstIndex: number, lastIndex: number, centerIndex?: number) => {
         if (this.fragmentSearchQuery.trim().length === 0) {
-          this.activeIndex = this.waterfallActiveIndex(firstIndex, lastIndex, centerIndex)
+          this.selectFragmentById(this.waterfallActiveFragmentId(firstIndex, lastIndex, centerIndex))
         }
       })
 
@@ -1339,6 +1374,13 @@ struct Index {
               .margin({ left: 16 })
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+            Text(this.fragmentDateLabel(item))
+              .fontSize(11)
+              .fontColor(BoxStyle.TEXT_MUTED)
+              .margin({ left: 16 })
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           .margin({ top: 12 })
         }
@@ -1357,7 +1399,7 @@ struct Index {
     .margin({ bottom: 4 })
     .animation({ duration: 260, curve: Curve.EaseOut })
     .onClick(() => {
-      this.activeIndex = this.fragmentIndexById(item.id)
+      this.selectFragmentById(item.id)
     })
   }
 
@@ -1782,7 +1824,7 @@ struct Index {
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .onClick(() => {
-        this.activeIndex = this.fragmentIndexById(item.id)
+        this.selectFragmentById(item.id)
         this.activeCommunityKey = 'root'
         this.expandedCommunityKeys = ['root']
       })
