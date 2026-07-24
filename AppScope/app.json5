@@ -1,9 +1,9 @@
 {
   "app": {
-    "bundleName": "com.example.fragmentbox",
-    "vendor": "fragment-demo",
-    "versionCode": 1000000,
-    "versionName": "1.0.0",
+    "bundleName": "cn.edu.bupt.gafa.fragment",
+    "vendor": "BUPT-GAFA",
+    "versionCode": 3000000,
+    "versionName": "0.3.0",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
