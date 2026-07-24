@@ -5,13 +5,13 @@ enum AppPage {
 }
 
 class BoxStyle {
-  static readonly PAGE_BG: string = '#F6F5F0'
+  static readonly PAGE_BG: string = '#F7F3EA'
   static readonly SURFACE: string = '#FFFFFF'
   static readonly CARD_BG: string = 'rgba(255, 255, 255, 0.82)'
-  static readonly SOFT_PANEL: string = 'rgba(239, 240, 235, 0.88)'
+  static readonly SOFT_PANEL: string = 'rgba(240, 241, 235, 0.90)'
   static readonly INPUT_BG: string = '#F3F3F0'
-  static readonly BUTTON_BG: string = '#262826'
-  static readonly TEXT: string = '#252725'
+  static readonly BUTTON_BG: string = '#222520'
+  static readonly TEXT: string = '#222520'
   static readonly TEXT_SOFT: string = '#6F746E'
   static readonly TEXT_MUTED: string = '#A1A49E'
   static readonly TEXT_FAINT: string = '#DADBD6'
@@ -20,7 +20,7 @@ class BoxStyle {
   static readonly SHADOW: string = 'rgba(44, 47, 45, 0.12)'
   static readonly SHADOW_SOFT: string = 'rgba(44, 47, 45, 0.08)'
   static readonly SELECTED_SOFT: string = '#E4E6E0'
-  static readonly SELECTED_TEXT: string = '#4E544E'
+  static readonly SELECTED_TEXT: string = '#465044'
   static readonly GRAPH_ACTIVE: string = 'rgba(64, 73, 67, 0.88)'
   static readonly GRAPH_IDLE: string = 'rgba(139, 143, 137, 0.22)'
   static readonly RADIUS_CARD: number = 28
@@ -28,8 +28,8 @@ class BoxStyle {
   static readonly RADIUS_PILL: number = 22
   static readonly ACTION_HEIGHT: number = 58
   static readonly PILL_HEIGHT: number = 44
-  static readonly MOTION_FAST: number = 220
-  static readonly MOTION_BASE: number = 260
+  static readonly MOTION_FAST: number = 180
+  static readonly MOTION_BASE: number = 220
 }
 class FragmentItem {
   id: string = ''
@@ -193,9 +193,9 @@ struct Index {
 
   @State communityNodes: CommunityNode[] = [
     new CommunityNode('root', '', '当前碎片', '当前碎片', '我的 Box', '延申起点', '', 'root', 54, 18, 208, 66),
-    new CommunityNode('similar', 'root', '相似经验', '相似经验', '匿名共享', 'AI 匹配：语义相近', '我发现自己不是抗拒见面，而是抗拒没有边界感的临时邀约。', 'slate', 0, 128, 98, 66),
-    new CommunityNode('opposite', 'root', '相反经验', '相反经验', 'Luna', 'AI 匹配：相反视角', '有时突然被叫出去反而让我重新启动，计划太满才会让我失去弹性。', 'blue', 109, 128, 98, 66),
-    new CommunityNode('action', 'root', '行动方向', '可借鉴做法', '匿名共享', 'AI 匹配：行动线索', '我会给朋友一个默认回复模板：今天电量低，但我不是不在乎。', 'green', 218, 128, 98, 66),
+    new CommunityNode('similar', 'root', '相似经验', '相似经验', '匿名共享', '关联依据：语义相近', '我发现自己不是抗拒见面，而是抗拒没有边界感的临时邀约。', 'slate', 0, 128, 98, 66),
+    new CommunityNode('opposite', 'root', '相反经验', '相反经验', 'Luna', '另一种视角', '有时突然被叫出去反而让我重新启动，计划太满才会让我失去弹性。', 'blue', 109, 128, 98, 66),
+    new CommunityNode('action', 'root', '行动方向', '可借鉴做法', '匿名共享', '可借鉴线索', '我会给朋友一个默认回复模板：今天电量低，但我不是不在乎。', 'green', 218, 128, 98, 66),
     new CommunityNode('metaphor', 'opposite', '延申比喻', '延申比喻', 'River', '来自相反经验的分叉', '社交电量也许不是电池，更像天气：它会变，但不需要被评判。', 'rose', 102, 236, 112, 66),
     new CommunityNode('city', 'similar', '城市观察', '城市观察', 'M.', '来自相似经验的分叉', '早高峰里很多人看起来冷漠，其实只是把情绪调到省电模式。', 'slate', 0, 340, 108, 66),
     new CommunityNode('reply', 'action', '关系提醒', '关系提醒', 'K', '来自行动做法的分叉', '边界不是拒绝关系，而是让关系不要总靠临时消耗来证明。', 'blue', 208, 340, 108, 66),
@@ -204,8 +204,8 @@ struct Index {
 
   aboutToAppear(): void {
     setInterval(() => {
-      this.boxFloatY = this.boxFloatY === 0 ? -10 : 0
-    }, 2200)
+      this.boxFloatY = 0
+    }, 3200)
   }
 
   build() {
@@ -229,14 +229,14 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor(BoxStyle.PAGE_BG)
-    .blur(this.showInputSheet ? 3 : 0)
+    .blur(this.showInputSheet ? 2 : 0)
     .bindSheet($$this.showInputSheet, this.InputSheet(), {
-      height: 620,
+      height: 610,
       showClose: false,
       dragBar: false,
-      backgroundColor: '#FFFFFF'
+      backgroundColor: '#FBFAF6'
     })
-    .animation({ duration: 260, curve: Curve.EaseOut })
+    .animation({ duration: BoxStyle.MOTION_BASE, curve: Curve.EaseOut })
     .gesture(
       PanGesture({ direction: PanDirection.Horizontal, distance: 18 })
         .onActionEnd((event: GestureEvent) => {
@@ -339,8 +339,8 @@ struct Index {
 
   private archiveFragment(): void {
     if (!this.shareChoiceMade) {
-      this.inputErrorText = '请先选择共享范围'
-      this.showNotice('请选择是否分享到社区')
+      this.inputErrorText = '请选择可见范围'
+      this.showNotice('请先选择可见范围')
       return
     }
 
@@ -451,8 +451,8 @@ struct Index {
     let base: number = this.communityNodes.length + 1
     let parent: CommunityNode = this.getCommunityNode(parentKey)
     return [
-      new CommunityNode(parentKey + '-a' + base.toString(), parentKey, '相似分支', parent.tag, '匿名共享', 'AI 匹配：相似经验', '换一个生活场景看，问题也许不是社交本身，而是节奏被打断。', 'slate', 0, 0, 0, 0),
-      new CommunityNode(parentKey + '-b' + base.toString(), parentKey, '反向视角', parent.tag, 'BOXer', 'AI 匹配：相反经验', '它也许不该被马上解决，只是需要被另一种方式看见。', 'rose', 0, 0, 0, 0)
+      new CommunityNode(parentKey + '-a' + base.toString(), parentKey, '相似分支', parent.tag, '匿名共享', '相似经验', '换一个生活场景看，问题也许不是社交本身，而是节奏被打断。', 'slate', 0, 0, 0, 0),
+      new CommunityNode(parentKey + '-b' + base.toString(), parentKey, '反向视角', parent.tag, 'BOXer', '相反经验', '它也许不该被马上解决，只是需要被另一种方式看见。', 'rose', 0, 0, 0, 0)
     ]
   }
 
@@ -664,21 +664,21 @@ struct Index {
       Circle()
         .width(420)
         .height(420)
-        .fill('rgba(255, 255, 255, 0.42)')
-        .stroke('rgba(213, 214, 208, 0.42)')
+        .fill('rgba(255, 255, 255, 0.36)')
+        .stroke('rgba(196, 199, 190, 0.38)')
         .strokeWidth(1)
         .position({ x: -238, y: 250 })
 
       Circle()
         .width(250)
         .height(250)
-        .fill('rgba(151, 161, 156, 0.08)')
+        .fill('rgba(104, 114, 103, 0.10)')
         .position({ x: 210, y: 382 })
 
       Circle()
         .width(230)
         .height(230)
-        .fill('rgba(255, 255, 255, 0.62)')
+        .fill('rgba(255, 255, 255, 0.54)')
         .position({ x: 88, y: 130 })
 
       Circle().width(4).height(4).fill('rgba(48, 50, 49, 0.12)').position({ x: 70, y: 88 })
@@ -697,15 +697,15 @@ struct Index {
     Text('BOX')
       .fontSize(20)
       .fontWeight(FontWeight.Bold)
-      .fontColor(BoxStyle.TEXT)
+      .fontColor('#F8F7F1')
       .letterSpacing(3)
       .height(38)
       .lineHeight(38)
-      .padding({ left: 14, right: 14 })
-      .backgroundColor('rgba(255, 255, 255, 0.58)')
-      .border({ width: 1, color: BoxStyle.HAIRLINE })
+      .padding({ left: 15, right: 15 })
+      .backgroundColor('#232620')
+      .border({ width: 1, color: 'rgba(35, 38, 32, 0.18)' })
       .borderRadius(19)
-      .shadow({ radius: 18, color: 'rgba(44, 47, 45, 0.08)', offsetX: 0, offsetY: 8 })
+      .shadow({ radius: 16, color: 'rgba(35, 38, 32, 0.14)', offsetX: 0, offsetY: 7 })
   }
 
   @Builder
@@ -713,18 +713,17 @@ struct Index {
     Stack() {
       Column() {
         Row() {
-          this.BrandBadge()
           Blank()
         }
         .width('100%')
-        .alignItems(VerticalAlign.Center)
+        .height(38)
 
         Blank()
 
         Column() {
           this.BoxArt()
 
-          Text('放入碎片')
+          Text('记录碎片')
             .fontSize(24)
             .fontWeight(FontWeight.Medium)
             .fontColor(BoxStyle.TEXT)
@@ -733,10 +732,10 @@ struct Index {
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          Text('Drop a fragment into BOX')
+          Text('A quiet place for stray thoughts')
             .fontSize(12)
-            .fontColor(BoxStyle.TEXT_MUTED)
-            .letterSpacing(0.4)
+            .fontColor('#7D837B')
+            .letterSpacing(0.2)
             .margin({ top: 9 })
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -761,75 +760,64 @@ struct Index {
   BoxArt() {
     Stack({ alignContent: Alignment.Center }) {
       Ellipse()
-        .width(206)
-        .height(36)
-        .fill('rgba(32, 34, 33, 0.13)')
-        .blur(14)
-        .translate({ y: 100 })
+        .width(258)
+        .height(38)
+        .fill('rgba(34, 37, 32, 0.18)')
+        .blur(13)
+        .translate({ y: 108 })
 
       Stack({ alignContent: Alignment.Center }) {
-        Path({ width: 250, height: 208, commands: 'M56 96 L125 124 L194 96 L194 152 L125 186 L56 152 Z' })
-          .fill('#D5D6CF')
-          .stroke('rgba(46, 49, 46, 0.18)')
-          .strokeWidth(1.3)
-          .shadow({ radius: 24, color: 'rgba(38, 41, 38, 0.12)', offsetX: 0, offsetY: 12 })
+        // A single paper puzzle piece: direct fragment metaphor, no box or note props.
+        Path({ width: 286, height: 286, commands: 'M82 54 L124 54 C124 34 140 20 158 20 C176 20 192 34 192 54 L236 54 C248 54 258 64 258 76 L258 124 C236 124 222 140 222 158 C222 176 236 192 258 192 L258 236 C258 248 248 258 236 258 L190 258 C190 236 174 222 156 222 C138 222 122 236 122 258 L82 258 C70 258 60 248 60 236 L60 190 C38 190 24 174 24 156 C24 138 38 122 60 122 L60 76 C60 64 70 54 82 54 Z' })
+          .fill('#EFE4BC')
+          .stroke('rgba(35, 38, 32, 0.24)')
+          .strokeWidth(1.5)
+          .shadow({ radius: 30, color: 'rgba(35, 38, 32, 0.18)', offsetX: 0, offsetY: 15 })
 
-        Path({ width: 250, height: 208, commands: 'M56 96 L125 124 L125 186 L56 152 Z' })
-          .fill('#C6C8C0')
-          .stroke('rgba(46, 49, 46, 0.12)')
+        Path({ width: 286, height: 286, commands: 'M82 54 L124 54 C124 34 140 20 158 20 C176 20 192 34 192 54 L236 54 C248 54 258 64 258 76 L258 124 C236 124 222 140 222 158 C222 176 236 192 258 192 L258 236 C258 248 248 258 236 258 L190 258 C190 236 174 222 156 222 C138 222 122 236 122 258 L82 258 C70 258 60 248 60 236 L60 190 C38 190 24 174 24 156 C24 138 38 122 60 122 L60 76 C60 64 70 54 82 54 Z' })
+          .fill('rgba(255, 255, 255, 0.16)')
+          .stroke('rgba(255, 255, 255, 0.12)')
           .strokeWidth(1)
-
-        Path({ width: 250, height: 208, commands: 'M125 124 L194 96 L194 152 L125 186 Z' })
-          .fill('#E3E3DC')
-          .stroke('rgba(46, 49, 46, 0.12)')
-          .strokeWidth(1)
-
-        Path({ width: 250, height: 208, commands: 'M56 96 L125 70 L194 96 L125 124 Z' })
-          .fill('#F3F2EC')
-          .stroke('rgba(46, 49, 46, 0.14)')
-          .strokeWidth(1)
-
-        Path({ width: 250, height: 208, commands: 'M56 96 L24 72 L92 48 L125 70 Z' })
-          .fill('#E7E6DE')
-          .stroke('rgba(46, 49, 46, 0.10)')
-          .strokeWidth(1)
-
-        Path({ width: 250, height: 208, commands: 'M194 96 L226 72 L158 48 L125 70 Z' })
-          .fill('#FAF9F3')
-          .stroke('rgba(46, 49, 46, 0.10)')
-          .strokeWidth(1)
-
-        Path({ width: 250, height: 208, commands: 'M92 48 L125 70 L158 48 L125 28 Z' })
-          .fill('#ECEBE4')
-          .stroke('rgba(46, 49, 46, 0.10)')
-          .strokeWidth(1)
+          .translate({ x: -4, y: -5 })
 
         Rect()
-          .width(66)
+          .width(100)
           .height(2)
           .radius(1)
-          .fill('rgba(58, 61, 58, 0.18)')
-          .translate({ x: 0, y: 46 })
+          .fill('rgba(62, 68, 58, 0.24)')
+          .translate({ x: -6, y: -22 })
+
+        Rect()
+          .width(132)
+          .height(2)
+          .radius(1)
+          .fill('rgba(62, 68, 58, 0.18)')
+          .translate({ x: 7, y: 0 })
+
+        Rect()
+          .width(86)
+          .height(2)
+          .radius(1)
+          .fill('rgba(62, 68, 58, 0.15)')
+          .translate({ x: -16, y: 22 })
+
+        Circle()
+          .width(9)
+          .height(9)
+          .fill('rgba(62, 72, 58, 0.24)')
+          .translate({ x: 62, y: -58 })
 
         Circle()
           .width(6)
           .height(6)
-          .fill('rgba(96, 104, 97, 0.20)')
-          .translate({ x: -50, y: 68 })
-
-        Circle()
-          .width(5)
-          .height(5)
-          .fill('rgba(96, 104, 97, 0.18)')
-          .translate({ x: 55, y: 78 })
+          .fill('rgba(62, 72, 58, 0.20)')
+          .translate({ x: -78, y: 58 })
       }
-      .width(250)
-      .height(208)
-      .translate({ y: this.boxFloatY })
-      .shadow({ radius: 34, color: 'rgba(38, 41, 38, 0.13)', offsetX: 0, offsetY: 16 })
+      .width(286)
+      .height(286)
     }
-    .width(320)
-    .height(276)
+    .width(336)
+    .height(300)
   }
 
   @Builder
@@ -979,7 +967,7 @@ struct Index {
   WaterfallHeader() {
     Row() {
       Column() {
-        Text('个人碎片集合')
+        Text('我的碎片')
           .fontSize(30)
           .fontWeight(FontWeight.Bold)
           .fontColor('#252729')
@@ -987,7 +975,7 @@ struct Index {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-        Text('滑动浏览被暂存的想法碎片')
+        Text('回看最近留下的记录')
           .fontSize(12)
           .fontColor('#9a9d97')
           .margin({ top: 7 })
@@ -996,15 +984,16 @@ struct Index {
       }
       .layoutWeight(1)
 
-      Button('查看关系 ↗')
-        .width(112)
-        .height(42)
+      Button('关系图')
+        .width(96)
+        .height(40)
         .fontSize(13)
         .fontColor('#343635')
         .padding({ left: 0, right: 0 })
-        .backgroundColor('rgba(255, 255, 255, 0.76)')
-        .borderRadius(21)
-        .shadow({ radius: 20, color: 'rgba(44, 46, 45, 0.12)', offsetX: 0, offsetY: 10 })
+        .backgroundColor('rgba(255, 255, 255, 0.72)')
+        .border({ width: 1, color: 'rgba(56, 58, 57, 0.08)' })
+        .borderRadius(20)
+        .shadow({ radius: 14, color: 'rgba(44, 46, 45, 0.08)', offsetX: 0, offsetY: 7 })
         .onClick(() => {
           this.graphMode = true
         })
@@ -1020,9 +1009,9 @@ struct Index {
     Column() {
       Row() {
         Text(item.id)
-          .fontSize(item.id === this.currentFragment().id ? 72 : 56)
+          .fontSize(item.id === this.currentFragment().id ? 68 : 56)
           .fontWeight(FontWeight.Bold)
-          .fontColor(item.id === this.currentFragment().id ? BoxStyle.TEXT : '#DADBD6')
+          .fontColor(item.id === this.currentFragment().id ? BoxStyle.TEXT : '#D4D6CF')
           .width(112)
           .textAlign(TextAlign.Start)
           .maxLines(1)
@@ -1030,22 +1019,22 @@ struct Index {
 
         Column() {
           Text(item.tag)
-            .fontSize(item.id === this.currentFragment().id ? 20 : 16)
+            .fontSize(item.id === this.currentFragment().id ? 19 : 16)
             .fontWeight(FontWeight.Bold)
             .fontColor(item.id === this.currentFragment().id ? BoxStyle.TEXT : '#969A94')
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
           Text(item.text)
-            .fontSize(item.id === this.currentFragment().id ? 16 : 15)
+            .fontSize(15)
             .fontColor(item.id === this.currentFragment().id ? BoxStyle.TEXT_SOFT : '#A7AAA4')
-            .lineHeight(item.id === this.currentFragment().id ? 27 : 24)
+            .lineHeight(24)
             .margin({ top: 8 })
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
           Row() {
-            Text(item.shared ? '匿名共享' : '仅自己可见')
+            Text(item.shared ? '加入社区' : '仅自己可见')
               .fontSize(11)
               .fontColor(BoxStyle.TEXT_MUTED)
               .maxLines(1)
@@ -1065,15 +1054,17 @@ struct Index {
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
-      .padding({ top: 18, bottom: 18 })
+      .height(132)
+      .padding({ top: 16, bottom: 16 })
     }
     .width('100%')
     .padding({ left: 10, right: 8 })
-    .backgroundColor(item.id === this.currentFragment().id ? 'rgba(255, 255, 255, 0.36)' : 'rgba(255, 255, 255, 0.00)')
+    .backgroundColor(item.id === this.currentFragment().id ? 'rgba(255, 255, 255, 0.68)' : 'rgba(255, 255, 255, 0.10)')
     .borderRadius(26)
-    .border({ width: 1, color: item.id === this.currentFragment().id ? 'rgba(58, 60, 58, 0.06)' : 'rgba(255, 255, 255, 0.00)' })
+    .border({ width: 1, color: item.id === this.currentFragment().id ? 'rgba(58, 60, 58, 0.10)' : 'rgba(255, 255, 255, 0.00)' })
     .margin({ bottom: 4 })
-    .animation({ duration: 260, curve: Curve.EaseOut })
+    .shadow({ radius: item.id === this.currentFragment().id ? 16 : 0, color: 'rgba(44, 46, 45, 0.07)', offsetX: 0, offsetY: 7 })
+    .animation({ duration: BoxStyle.MOTION_FAST, curve: Curve.EaseOut })
     .onClick(() => {
       this.activeIndex = this.fragmentIndexById(item.id)
     })
@@ -1081,18 +1072,18 @@ struct Index {
 
   @Builder
   WaterfallHintCard() {
-    Text('上下滑动，居中碎片自动高亮')
+    Text('停在中间的碎片会被选中')
       .fontSize(14)
       .fontColor('#767974')
       .textAlign(TextAlign.Center)
       .width('100%')
-      .height(52)
-      .lineHeight(52)
+      .height(48)
+      .lineHeight(48)
       .padding({ left: 18, right: 18 })
-      .backgroundColor('rgba(255, 255, 255, 0.86)')
+      .backgroundColor('rgba(255, 255, 255, 0.72)')
       .border({ width: 1, color: 'rgba(56, 58, 57, 0.08)' })
       .borderRadius(26)
-      .shadow({ radius: 24, color: 'rgba(44, 46, 45, 0.10)', offsetX: 0, offsetY: 12 })
+      .shadow({ radius: 14, color: 'rgba(44, 46, 45, 0.06)', offsetX: 0, offsetY: 7 })
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
   }
@@ -1245,7 +1236,7 @@ struct Index {
           .alignItems(VerticalAlign.Center)
         }, (levelNodes: CommunityNode[], levelIndex: number) => levelIndex.toString())
 
-        Text('点击末端节点，AI 会继续找到新的共享碎片')
+        Text('点击末端节点，继续展开新的共享碎片')
           .fontSize(12)
           .fontColor(BoxStyle.TEXT_MUTED)
           .textAlign(TextAlign.Center)
@@ -1253,7 +1244,8 @@ struct Index {
           .height(42)
           .lineHeight(42)
           .margin({ top: 12 })
-          .backgroundColor('rgba(255, 255, 255, 0.42)')
+          .backgroundColor('rgba(255, 255, 255, 0.56)')
+          .border({ width: 1, color: 'rgba(55, 57, 55, 0.05)' })
           .borderRadius(21)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1264,8 +1256,8 @@ struct Index {
     .width('100%')
     .layoutWeight(1)
     .margin({ top: 12 })
-    .backgroundColor(BoxStyle.SOFT_PANEL)
-    .border({ width: 1, color: BoxStyle.HAIRLINE })
+    .backgroundColor('rgba(241, 242, 237, 0.90)')
+    .border({ width: 1, color: 'rgba(55, 57, 55, 0.07)' })
     .borderRadius(28)
     .scrollBar(BarState.Off)
     .clip(true)
@@ -1383,12 +1375,12 @@ struct Index {
     .width(w)
     .height(h)
     .padding({ left: 8, right: 8, top: 10, bottom: 8 })
-    .backgroundColor(this.activeCommunityKey === node.key ? '#FFFFFF' : 'rgba(248, 248, 244, 0.70)')
+    .backgroundColor(this.activeCommunityKey === node.key ? '#FFFFFF' : 'rgba(250, 250, 246, 0.74)')
     .borderRadius(18)
     .border({ width: 1, color: this.activeCommunityKey === node.key ? 'rgba(62, 66, 61, 0.22)' : 'rgba(62, 66, 61, 0.08)' })
     .shadow({ radius: this.activeCommunityKey === node.key ? 20 : 8, color: this.activeCommunityKey === node.key ? 'rgba(43, 45, 44, 0.13)' : 'rgba(43, 45, 44, 0.05)', offsetX: 0, offsetY: 7 })
     .position({ x: x, y: y })
-    .animation({ duration: 240, curve: Curve.EaseOut })
+    .animation({ duration: BoxStyle.MOTION_FAST, curve: Curve.EaseOut })
     .onClick(() => {
       this.selectCommunityNode(node.key)
     })
@@ -1460,7 +1452,7 @@ struct Index {
           .borderRadius(18)
           .onClick(() => {
             this.selectCommunityNode(this.activeCommunityKey)
-            this.showNotice('已生成新的延伸分支')
+            this.showNotice('已展开新的延伸分支')
           })
       }
       .width('100%')
@@ -1518,29 +1510,29 @@ struct Index {
     Column() {
       Rect()
         .width(1.2)
-        .height(26)
+        .height(24)
         .radius(1)
-        .fill('rgba(126, 130, 123, 0.28)')
+        .fill('rgba(118, 123, 116, 0.22)')
 
       Row() {
         Blank()
         Rect()
-          .width(count <= 1 ? 1.2 : '62%')
+          .width(count <= 1 ? 1.2 : '58%')
           .height(1.2)
           .radius(1)
-          .fill('rgba(126, 130, 123, 0.24)')
+          .fill('rgba(118, 123, 116, 0.18)')
         Blank()
       }
       .width('100%')
 
       Rect()
         .width(1.2)
-        .height(24)
+        .height(22)
         .radius(1)
-        .fill('rgba(126, 130, 123, 0.22)')
+        .fill('rgba(118, 123, 116, 0.18)')
     }
     .width('100%')
-    .height(58)
+    .height(52)
     .alignItems(HorizontalAlign.Center)
   }
 
@@ -1556,8 +1548,8 @@ struct Index {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-      Text(node.key === 'root' ? '当前碎片' : (this.childrenOf(node.key).length > 0 ? '已可延申' : '点击生长'))
-        .fontSize(depth >= 3 ? 8 : 10)
+      Text(node.key === 'root' ? '当前碎片' : (this.childrenOf(node.key).length > 0 ? '已展开' : '继续展开'))
+        .fontSize(depth >= 3 ? 8 : 9)
         .fontColor(BoxStyle.TEXT_MUTED)
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -1568,11 +1560,11 @@ struct Index {
     .width(this.treeNodeWidth(depth, count))
     .height(this.treeNodeHeight(depth))
     .padding({ left: depth >= 2 ? 6 : 10, right: depth >= 2 ? 6 : 10, top: depth >= 2 ? 8 : 11, bottom: depth >= 2 ? 8 : 10 })
-    .backgroundColor(this.activeCommunityKey === node.key ? '#FFFFFF' : 'rgba(248, 248, 244, 0.70)')
+    .backgroundColor(this.activeCommunityKey === node.key ? '#FFFFFF' : 'rgba(250, 250, 246, 0.74)')
     .borderRadius(18)
-    .border({ width: 1, color: this.activeCommunityKey === node.key ? 'rgba(64, 68, 64, 0.22)' : BoxStyle.HAIRLINE })
-    .shadow({ radius: this.activeCommunityKey === node.key ? 20 : 8, color: this.activeCommunityKey === node.key ? 'rgba(43, 45, 44, 0.12)' : 'rgba(43, 45, 44, 0.05)', offsetX: 0, offsetY: 7 })
-    .animation({ duration: 240, curve: Curve.EaseOut })
+    .border({ width: 1, color: this.activeCommunityKey === node.key ? 'rgba(64, 68, 64, 0.20)' : 'rgba(55, 57, 55, 0.06)' })
+    .shadow({ radius: this.activeCommunityKey === node.key ? 18 : 4, color: this.activeCommunityKey === node.key ? 'rgba(43, 45, 44, 0.11)' : 'rgba(43, 45, 44, 0.035)', offsetX: 0, offsetY: 6 })
+    .animation({ duration: BoxStyle.MOTION_FAST, curve: Curve.EaseOut })
     .onClick(() => {
       this.selectCommunityNode(node.key)
     })
@@ -1666,10 +1658,10 @@ struct Index {
 
   @Builder
   InputSheet() {
-    Column({ space: 22 }) {
+    Column({ space: 20 }) {
       // 原生半模态内容：只承载输入、Tag、提醒偏好和完成动作。
       Row() {
-        Text('放入碎片')
+        Text('记录碎片')
           .fontSize(24)
           .fontWeight(FontWeight.Bold)
           .fontColor(BoxStyle.TEXT)
@@ -1683,7 +1675,7 @@ struct Index {
           .fontWeight(FontWeight.Medium)
           .fontColor('#6C706A')
           .textAlign(TextAlign.Center)
-          .backgroundColor('#F1F1EE')
+          .backgroundColor('rgba(241, 241, 238, 0.86)')
           .border({ width: 1, color: BoxStyle.HAIRLINE })
           .borderRadius(21)
           .onClick(() => {
@@ -1694,34 +1686,34 @@ struct Index {
       .justifyContent(FlexAlign.SpaceBetween)
       .alignItems(VerticalAlign.Center)
 
-      TextArea({ placeholder: '写下一句灵感、观察、经验或突然冒出的想法...', text: this.draftContent })
+      TextArea({ placeholder: '写下刚刚想到的内容...', text: this.draftContent })
         .width('100%')
-        .height(150)
+        .height(138)
         .fontSize(16)
         .fontColor(BoxStyle.TEXT)
-        .placeholderColor('#A7AAA4')
-        .backgroundColor('#F3F3F0')
+        .placeholderColor('#A4A7A1')
+        .backgroundColor('rgba(243, 243, 240, 0.92)')
         .border({ width: 1, color: 'rgba(55, 57, 55, 0.05)' })
-        .borderRadius(20)
+        .borderRadius(18)
         .padding({ left: 18, right: 18, top: 16, bottom: 16 })
         .onChange((value: string) => {
           this.draftContent = value
         })
 
       Column({ space: 8 }) {
-        Text('Tag')
+        Text('标签')
           .fontSize(13)
           .fontColor(BoxStyle.TEXT_MUTED)
           .fontWeight(FontWeight.Medium)
           .width('100%')
 
-        TextInput({ placeholder: '例如：通勤观察 / 情绪 / 灵感', text: this.draftTag })
+        TextInput({ placeholder: '例如：通勤观察、情绪或灵感', text: this.draftTag })
           .width('100%')
-          .height(52)
+          .height(50)
           .fontSize(15)
           .fontColor(BoxStyle.TEXT)
-          .placeholderColor('#A7AAA4')
-          .backgroundColor('#F3F3F0')
+          .placeholderColor('#A4A7A1')
+          .backgroundColor('rgba(243, 243, 240, 0.92)')
           .border({ width: 1, color: 'rgba(55, 57, 55, 0.05)' })
           .borderRadius(18)
           .padding({ left: 16, right: 16 })
@@ -1733,7 +1725,7 @@ struct Index {
       .alignItems(HorizontalAlign.Start)
 
       Column({ space: 12 }) {
-        Text('提醒偏好')
+        Text('何时提醒')
           .fontSize(13)
           .fontColor(BoxStyle.TEXT_MUTED)
           .fontWeight(FontWeight.Medium)
@@ -1751,21 +1743,21 @@ struct Index {
 
       Column({ space: 12 }) {
         Row() {
-          Text('是否共享到社区')
+          Text('可见范围')
             .fontSize(13)
             .fontColor(BoxStyle.TEXT_MUTED)
             .fontWeight(FontWeight.Medium)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
 
-          Text('必选')
+          Text('请选择')
             .fontSize(11)
-            .fontColor('#8D8370')
+            .fontColor('#7C817A')
             .textAlign(TextAlign.Center)
             .height(24)
             .lineHeight(24)
             .padding({ left: 9, right: 9 })
-            .backgroundColor('rgba(224, 217, 198, 0.45)')
+            .backgroundColor('rgba(232, 233, 228, 0.82)')
             .borderRadius(12)
         }
         .width('100%')
@@ -1773,7 +1765,7 @@ struct Index {
         .alignItems(VerticalAlign.Center)
 
         Row({ space: 12 }) {
-          this.ShareChoicePill('匿名共享', true)
+          this.ShareChoicePill('匿名加入社区', true)
           this.ShareChoicePill('仅自己可见', false)
         }
         .width('100%')
@@ -1781,11 +1773,11 @@ struct Index {
         if (this.inputErrorText.length > 0) {
           Text(this.inputErrorText)
             .fontSize(12)
-            .fontColor('#A66358')
+            .fontColor('#8F6258')
             .height(24)
             .lineHeight(24)
             .padding({ left: 12, right: 12 })
-            .backgroundColor('rgba(166, 99, 88, 0.10)')
+            .backgroundColor('rgba(143, 98, 88, 0.08)')
             .borderRadius(12)
             .margin({ top: 2 })
             .maxLines(1)
@@ -1795,16 +1787,16 @@ struct Index {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
 
-      Button(this.shareChoiceMade ? '完成存档' : '选择后完成存档')
+      Button(this.shareChoiceMade ? '保存碎片' : '先选择可见范围')
         .width('100%')
-        .height(58)
+        .height(56)
         .fontSize(17)
         .fontWeight(FontWeight.Bold)
         .fontColor('#FFFFFF')
         .padding({ left: 0, right: 0 })
-        .backgroundColor(this.shareChoiceMade ? '#262826' : '#B7B9B2')
-        .borderRadius(29)
-        .shadow({ radius: 20, color: 'rgba(38, 40, 38, 0.16)', offsetX: 0, offsetY: 10 })
+        .backgroundColor(this.shareChoiceMade ? '#262826' : '#C2C4BE')
+        .borderRadius(28)
+        .shadow({ radius: this.shareChoiceMade ? 14 : 0, color: 'rgba(38, 40, 38, 0.12)', offsetX: 0, offsetY: 7 })
         .onClick(() => {
           this.archiveFragment()
         })
@@ -1890,8 +1882,8 @@ struct Index {
         }
         .height(18)
         .padding({ left: 10, right: 3, top: 6, bottom: 6 })
-        .backgroundColor('rgba(255, 255, 255, 0.42)')
-        .border({ width: 1, color: 'rgba(55, 57, 55, 0.06)' })
+        .backgroundColor('rgba(255, 255, 255, 0.50)')
+        .border({ width: 1, color: 'rgba(55, 57, 55, 0.07)' })
         .borderRadius(15)
         Blank()
       }
@@ -1910,7 +1902,7 @@ struct Index {
       .width(this.currentPage === page ? 18 : 6)
       .height(6)
       .radius(3)
-      .fill(this.currentPage === page ? 'rgba(91, 94, 92, 0.72)' : 'rgba(45, 47, 46, 0.16)')
+      .fill(this.currentPage === page ? 'rgba(35, 38, 32, 0.74)' : 'rgba(45, 47, 46, 0.15)')
       .margin({ right: 7 })
   }
 
@@ -1924,16 +1916,16 @@ struct Index {
           .fontSize(13)
           .fontColor('#F8F8F4')
           .textAlign(TextAlign.Center)
-          .padding({ left: 18, right: 18, top: 10, bottom: 10 })
-          .backgroundColor('rgba(48, 50, 49, 0.88)')
-          .borderRadius(20)
+          .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+          .backgroundColor('rgba(45, 48, 43, 0.82)')
+          .borderRadius(18)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Blank()
       }
       .width('100%')
       .padding({ left: 26, right: 26 })
-      .margin({ bottom: 78 })
+      .margin({ bottom: 92 })
     }
     .width('100%')
     .height('100%')
