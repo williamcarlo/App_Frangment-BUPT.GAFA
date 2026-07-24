@@ -23,24 +23,21 @@ export class CommunityService {
 
   static createPrivateCopy(
     node: CommunityNode,
-    displayCode: string,
     nowTimestamp: number = Date.now()
   ): FragmentItem {
-    return new FragmentItem(
-      IdService.create('fragment', nowTimestamp),
-      node.tag,
-      node.text,
-      node.tone,
-      ReminderPreference.WEEKEND,
-      false,
-      '今天',
-      nowTimestamp,
-      displayCode,
-      FragmentVisibility.PRIVATE,
-      nowTimestamp,
-      0,
-      node.key,
-      FragmentModerationStatus.LOCAL_ONLY
-    )
+    return new FragmentItem({
+      id: IdService.create('fragment', nowTimestamp),
+      displayCode: '',
+      tag: node.tag,
+      text: node.text,
+      tone: node.tone,
+      remind: ReminderPreference.WEEKEND,
+      visibility: FragmentVisibility.PRIVATE,
+      createdAt: '今天',
+      createdAtTimestamp: nowTimestamp,
+      updatedAtTimestamp: nowTimestamp,
+      sourceCommunityNodeId: node.key,
+      moderationStatus: FragmentModerationStatus.LOCAL_ONLY
+    })
   }
 }

@@ -11,9 +11,5 @@ export default function idServiceTest() {
       expect(first.indexOf('fragment_') === 0).assertEqual(true)
     })
 
-    it('keeps display codes separate from persistent IDs', 0, () => {
-      expect(IdService.displayCode(0)).assertEqual('01')
-      expect(IdService.displayCode(9)).assertEqual('10')
-    })
   })
 }

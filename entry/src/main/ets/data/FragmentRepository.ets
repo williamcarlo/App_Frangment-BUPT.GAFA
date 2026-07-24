@@ -28,6 +28,21 @@ export class FragmentRepository {
     }
   }
 
+  async findById(fragmentId: string): Promise<FragmentItem | null> {
+    let resultSet: relationalStore.ResultSet = await this.database.getStore().querySql(
+      'SELECT * FROM fragments WHERE id = ? LIMIT 1',
+      [fragmentId]
+    )
+    try {
+      if (resultSet.goToNextRow()) {
+        return this.mapFragment(resultSet)
+      }
+      return null
+    } finally {
+      resultSet.close()
+    }
+  }
+
   async loadActive(): Promise<FragmentItem[]> {
     return this.queryFragments(
       'SELECT * FROM fragments WHERE archived_at = 0 ORDER BY created_at ASC'
@@ -134,22 +149,22 @@ export class FragmentRepository {
     let moderationStatus: FragmentModerationStatus = this.parseModerationStatus(
       resultSet.getString(resultSet.getColumnIndex('moderation_status'))
     )
-    return new FragmentItem(
-      resultSet.getString(resultSet.getColumnIndex('id')),
-      resultSet.getString(resultSet.getColumnIndex('tag')),
-      resultSet.getString(resultSet.getColumnIndex('content')),
-      resultSet.getString(resultSet.getColumnIndex('tone')),
-      reminder,
-      visibility === FragmentVisibility.COMMUNITY,
-      '',
-      resultSet.getLong(resultSet.getColumnIndex('created_at')),
-      resultSet.getString(resultSet.getColumnIndex('display_code')),
-      visibility,
-      resultSet.getLong(resultSet.getColumnIndex('updated_at')),
-      resultSet.getLong(resultSet.getColumnIndex('archived_at')),
-      resultSet.getString(resultSet.getColumnIndex('source_community_node_id')),
-      moderationStatus
-    )
+    return new FragmentItem({
+      id: resultSet.getString(resultSet.getColumnIndex('id')),
+      displayCode: resultSet.getString(resultSet.getColumnIndex('display_code')),
+      tag: resultSet.getString(resultSet.getColumnIndex('tag')),
+      text: resultSet.getString(resultSet.getColumnIndex('content')),
+      tone: resultSet.getString(resultSet.getColumnIndex('tone')),
+      remind: reminder,
+      visibility: visibility,
+      createdAt: '',
+      createdAtTimestamp: resultSet.getLong(resultSet.getColumnIndex('created_at')),
+      updatedAtTimestamp: resultSet.getLong(resultSet.getColumnIndex('updated_at')),
+      archivedAtTimestamp: resultSet.getLong(resultSet.getColumnIndex('archived_at')),
+      sourceCommunityNodeId:
+        resultSet.getString(resultSet.getColumnIndex('source_community_node_id')),
+      moderationStatus: moderationStatus
+    })
   }
 
   private parseVisibility(value: string): FragmentVisibility {

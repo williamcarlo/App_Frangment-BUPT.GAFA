@@ -20,10 +20,10 @@ export default function communityServiceTest() {
         0,
         0
       )
-      let copy = CommunityService.createPrivateCopy(node, '07', 1000)
+      let copy = CommunityService.createPrivateCopy(node, 1000)
       expect(copy.visibility).assertEqual(FragmentVisibility.PRIVATE)
       expect(copy.sourceCommunityNodeId).assertEqual('community-1')
-      expect(copy.displayCode).assertEqual('07')
+      expect(copy.displayCode).assertEqual('')
     })
 
     it('detects a previously saved community node', 0, () => {

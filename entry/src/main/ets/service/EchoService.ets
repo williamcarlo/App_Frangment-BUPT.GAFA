@@ -26,13 +26,67 @@ export class EchoService {
       return null
     }
 
-    let selected: FragmentItem = candidates[0]
-    for (let i: number = 1; i < candidates.length; i++) {
-      if (candidates[i].createdAtTimestamp < selected.createdAtTimestamp) {
-        selected = candidates[i]
+    let selected: FragmentItem =
+      EchoService.selectDeterministically(candidates, records, nowTimestamp)
+    return new EchoCandidate(selected.id, EchoService.reasonFor(selected.remind))
+  }
+
+  private static selectDeterministically(
+    candidates: FragmentItem[],
+    records: EchoRecord[],
+    nowTimestamp: number
+  ): FragmentItem {
+    let highestWaitScore: number = -1
+    let fairest: FragmentItem[] = []
+    for (let i: number = 0; i < candidates.length; i++) {
+      let score: number = EchoService.waitScore(candidates[i].id, records, nowTimestamp)
+      if (score > highestWaitScore) {
+        highestWaitScore = score
+        fairest = [candidates[i]]
+      } else if (score === highestWaitScore) {
+        fairest.push(candidates[i])
       }
     }
-    return new EchoCandidate(selected.id, EchoService.reasonFor(selected.remind))
+    fairest.sort((first: FragmentItem, second: FragmentItem) => first.id.localeCompare(second.id))
+    let dayKey: string = EchoService.localDayKey(nowTimestamp)
+    let identitySet: string = ''
+    for (let i: number = 0; i < fairest.length; i++) {
+      identitySet += fairest[i].id + '\n'
+    }
+    let selectedIndex: number = EchoService.hash(dayKey + '\n' + identitySet) % fairest.length
+    return fairest[selectedIndex]
+  }
+
+  private static waitScore(
+    fragmentId: string,
+    records: EchoRecord[],
+    nowTimestamp: number
+  ): number {
+    let latestSurfacedAt: number = 0
+    for (let i: number = 0; i < records.length; i++) {
+      if (records[i].fragmentId === fragmentId &&
+        records[i].surfacedAtTimestamp > latestSurfacedAt) {
+        latestSurfacedAt = records[i].surfacedAtTimestamp
+      }
+    }
+    if (latestSurfacedAt === 0) {
+      return 30
+    }
+    return Math.min(29, Math.floor((nowTimestamp - latestSurfacedAt) / DateUtils.DAY_MS))
+  }
+
+  private static localDayKey(nowTimestamp: number): string {
+    let date: Date = new Date(nowTimestamp)
+    return date.getFullYear().toString() + '-' +
+      (date.getMonth() + 1).toString() + '-' + date.getDate().toString()
+  }
+
+  private static hash(value: string): number {
+    let hashValue: number = 0
+    for (let i: number = 0; i < value.length; i++) {
+      hashValue = (hashValue * 31 + value.charCodeAt(i)) >>> 0
+    }
+    return hashValue
   }
 
   static isEligible(fragment: FragmentItem, records: EchoRecord[], nowTimestamp: number): boolean {

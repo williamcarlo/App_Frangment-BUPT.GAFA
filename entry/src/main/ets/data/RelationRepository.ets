@@ -31,6 +31,7 @@ export class RelationRepository {
   }
 
   async insert(relation: FragmentRelation): Promise<void> {
+    this.assertValid(relation)
     let values: relationalStore.ValuesBucket = {
       id: relation.id,
       from_fragment_id: relation.fromFragmentId,
@@ -42,6 +43,7 @@ export class RelationRepository {
   }
 
   async insertOrReplace(relation: FragmentRelation): Promise<void> {
+    this.assertValid(relation)
     await this.database.getStore().executeSql(
       `INSERT OR REPLACE INTO fragment_relations(
          id, from_fragment_id, to_fragment_id, relation_type, created_at
@@ -61,5 +63,14 @@ export class RelationRepository {
       'DELETE FROM fragment_relations WHERE from_fragment_id = ? OR to_fragment_id = ?',
       [fragmentId, fragmentId]
     )
+  }
+
+  private assertValid(relation: FragmentRelation): void {
+    if (relation.fromFragmentId.trim().length === 0 ||
+      relation.toFragmentId.trim().length === 0 ||
+      relation.fromFragmentId === 'empty' ||
+      relation.toFragmentId === 'empty') {
+      throw new Error('RELATION_INVALID_ENDPOINT')
+    }
   }
 }

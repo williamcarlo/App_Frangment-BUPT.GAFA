@@ -20,6 +20,30 @@ export enum FragmentModerationStatus {
   REJECTED = 'REJECTED'
 }
 
+export enum FragmentLifecycleAction {
+  NONE = 'NONE',
+  ARCHIVE = 'ARCHIVE',
+  RESTORE = 'RESTORE',
+  REVOKE = 'REVOKE',
+  DELETE = 'DELETE'
+}
+
+export interface FragmentItemInit {
+  id: string
+  displayCode: string
+  tag: string
+  text: string
+  tone: string
+  remind: ReminderPreference
+  visibility: FragmentVisibility
+  createdAtTimestamp: number
+  createdAt?: string
+  updatedAtTimestamp?: number
+  archivedAtTimestamp?: number
+  sourceCommunityNodeId?: string
+  moderationStatus?: FragmentModerationStatus
+}
+
 export class FragmentItem {
   id: string = ''
   displayCode: string = ''
@@ -35,35 +59,27 @@ export class FragmentItem {
   sourceCommunityNodeId: string = ''
   moderationStatus: FragmentModerationStatus = FragmentModerationStatus.LOCAL_ONLY
 
-  constructor(
-    id: string,
-    tag: string,
-    text: string,
-    tone: string,
-    remind: ReminderPreference,
-    shared: boolean,
-    createdAt: string,
-    createdAtTimestamp: number = Date.now(),
-    displayCode: string = '',
-    visibility: FragmentVisibility = FragmentVisibility.PRIVATE,
-    updatedAtTimestamp: number = 0,
-    archivedAtTimestamp: number = 0,
-    sourceCommunityNodeId: string = '',
-    moderationStatus: FragmentModerationStatus = FragmentModerationStatus.LOCAL_ONLY
-  ) {
-    this.id = id
-    this.displayCode = displayCode.length > 0 ? displayCode : id
-    this.tag = tag
-    this.text = text
-    this.tone = tone
-    this.remind = remind
-    this.visibility = shared ? FragmentVisibility.COMMUNITY : visibility
-    this.createdAt = createdAt
-    this.createdAtTimestamp = createdAtTimestamp
-    this.updatedAtTimestamp = updatedAtTimestamp > 0 ? updatedAtTimestamp : createdAtTimestamp
-    this.archivedAtTimestamp = archivedAtTimestamp
-    this.sourceCommunityNodeId = sourceCommunityNodeId
-    this.moderationStatus = moderationStatus
+  constructor(init: FragmentItemInit) {
+    this.id = init.id
+    this.displayCode = init.displayCode
+    this.tag = init.tag
+    this.text = init.text
+    this.tone = init.tone
+    this.remind = init.remind
+    this.visibility = init.visibility
+    this.createdAt = init.createdAt === undefined ? '' : init.createdAt
+    this.createdAtTimestamp = init.createdAtTimestamp
+    this.updatedAtTimestamp = init.updatedAtTimestamp === undefined ||
+      init.updatedAtTimestamp <= 0 ? init.createdAtTimestamp : init.updatedAtTimestamp
+    this.archivedAtTimestamp = init.archivedAtTimestamp === undefined ? 0 : init.archivedAtTimestamp
+    this.sourceCommunityNodeId =
+      init.sourceCommunityNodeId === undefined ? '' : init.sourceCommunityNodeId
+    if (this.visibility === FragmentVisibility.COMMUNITY) {
+      this.moderationStatus = init.moderationStatus === undefined ?
+        FragmentModerationStatus.PENDING : init.moderationStatus
+    } else {
+      this.moderationStatus = FragmentModerationStatus.LOCAL_ONLY
+    }
   }
 
   get shared(): boolean {
@@ -104,6 +120,8 @@ export class SharingConsent {
   specificPeople: string = ''
   consentedAtTimestamp: number = 0
   revokedAtTimestamp: number = 0
+  supersededAtTimestamp: number = 0
+  isActive: boolean = true
 
   constructor(
     id: string,
@@ -111,7 +129,9 @@ export class SharingConsent {
     visibility: FragmentVisibility,
     specificPeople: string,
     consentedAtTimestamp: number,
-    revokedAtTimestamp: number = 0
+    revokedAtTimestamp: number = 0,
+    supersededAtTimestamp: number = 0,
+    isActive: boolean = true
   ) {
     this.id = id
     this.fragmentId = fragmentId
@@ -119,6 +139,8 @@ export class SharingConsent {
     this.specificPeople = specificPeople
     this.consentedAtTimestamp = consentedAtTimestamp
     this.revokedAtTimestamp = revokedAtTimestamp
+    this.supersededAtTimestamp = supersededAtTimestamp
+    this.isActive = isActive
   }
 }
 

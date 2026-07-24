@@ -8,14 +8,6 @@ export class IdService {
       IdService.sequence.toString(36) + '_' + randomPart.toString(36)
   }
 
-  static displayCode(existingCount: number): string {
-    let value: number = existingCount + 1
-    if (value < 10) {
-      return '0' + value.toString()
-    }
-    return value.toString()
-  }
-
   static resetSequenceForTesting(): void {
     IdService.sequence = 0
   }
