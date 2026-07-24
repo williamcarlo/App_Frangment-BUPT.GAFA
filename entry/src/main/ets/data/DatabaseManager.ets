@@ -7,7 +7,7 @@ const STORE_CONFIG: relationalStore.StoreConfig = {
 }
 
 export class DatabaseManager {
-  static readonly DATABASE_VERSION: number = 2
+  static readonly DATABASE_VERSION: number = 3
   private store: relationalStore.RdbStore | null = null
 
   async initialize(context: common.UIAbilityContext): Promise<void> {
@@ -34,6 +34,10 @@ export class DatabaseManager {
     if (store.version === 1) {
       await this.migrateVersionOneToTwo(store)
       store.version = 2
+    }
+    if (store.version === 2) {
+      await this.migrateVersionTwoToThree(store)
+      store.version = 3
     }
     if (store.version > DatabaseManager.DATABASE_VERSION) {
       throw new Error('数据库版本高于当前应用支持版本')
@@ -109,5 +113,38 @@ export class DatabaseManager {
     await store.executeSql(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_community_saved_fragment ON community_saves(saved_fragment_id)'
     )
+  }
+
+  private async migrateVersionTwoToThree(store: relationalStore.RdbStore): Promise<void> {
+    let statements: string[] = [
+      `CREATE TABLE IF NOT EXISTS fragment_embeddings (
+        fragment_id TEXT PRIMARY KEY,
+        model TEXT NOT NULL,
+        dimension INTEGER NOT NULL,
+        vector_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS ai_analyses (
+        fragment_id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        normalized_tag TEXT NOT NULL,
+        tone TEXT NOT NULL,
+        reminder TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS ai_processing_consents (
+        fragment_id TEXT PRIMARY KEY,
+        provider_scope TEXT NOT NULL,
+        consented_at INTEGER NOT NULL,
+        revoked_at INTEGER NOT NULL DEFAULT 0
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_embedding_updated_at ON fragment_embeddings(updated_at)',
+      'CREATE INDEX IF NOT EXISTS idx_ai_consent_active ON ai_processing_consents(revoked_at)'
+    ]
+    for (let i: number = 0; i < statements.length; i++) {
+      await store.executeSql(statements[i])
+    }
   }
 }

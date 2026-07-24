@@ -41,6 +41,21 @@ export class RelationRepository {
     await this.database.getStore().insert('fragment_relations', values)
   }
 
+  async insertOrReplace(relation: FragmentRelation): Promise<void> {
+    await this.database.getStore().executeSql(
+      `INSERT OR REPLACE INTO fragment_relations(
+         id, from_fragment_id, to_fragment_id, relation_type, created_at
+       ) VALUES(?, ?, ?, ?, ?)`,
+      [
+        relation.id,
+        relation.fromFragmentId,
+        relation.toFragmentId,
+        relation.relationType,
+        relation.createdAtTimestamp
+      ]
+    )
+  }
+
   async deleteForFragment(fragmentId: string): Promise<void> {
     await this.database.getStore().executeSql(
       'DELETE FROM fragment_relations WHERE from_fragment_id = ? OR to_fragment_id = ?',

@@ -1,6 +1,6 @@
 # 数据模型
 
-数据库：`fragment_box.db`，当前版本 `2`。
+数据库：`fragment_box.db`，当前版本 `3`。
 
 ## 表
 
@@ -26,13 +26,26 @@
 
 ### `app_metadata`
 
-小型应用状态，例如 `privacy_explainer_v1=acknowledged`。
+小型应用状态，例如 `privacy_explainer_v1=acknowledged` 和公开的 AI 网关 URL。网关访问口令不会写入此表。
+
+### `fragment_embeddings`
+
+用户授权 AI 处理后保存的本地向量。字段为 `fragment_id`、`model`、`dimension`、`vector_json` 和 `updated_at`。相似度计算只比较 `model` 与 `dimension` 相同的记录。
+
+### `ai_analyses`
+
+结构化 AI 整理结果。字段为 `fragment_id`、`provider`、`model`、`normalized_tag`、`tone`、`reminder`、`summary` 和 `created_at`。
+
+### `ai_processing_consents`
+
+逐碎片 AI 授权审计。字段为 `fragment_id`、`provider_scope`、`consented_at` 和 `revoked_at`。该授权与社区共享授权完全独立。
 
 ## 迁移
 
 - v1：创建碎片、关系、回响、授权和元数据表；
 - v2：为碎片增加社区来源和审核状态，并创建 `community_saves`；
-- 新库也按 v1→v2 顺序执行，确保迁移路径真实可运行；
+- v3：创建 AI 分析、向量和逐碎片 AI 授权表；
+- 新库也按 v1→v2→v3 顺序执行，确保迁移路径真实可运行；
 - 仅在 `fragments` 数量为 0 时写入示例数据。
 
-当前没有外键约束，跨表清理由 ViewModel 事务保证。接入云端前应增加可恢复的迁移备份与数据导出。
+当前没有外键约束，跨表清理由 ViewModel 事务保证。永久删除会在同一事务中清除对应 AI 分析、向量与授权。后续应增加可恢复的迁移备份与数据导出。

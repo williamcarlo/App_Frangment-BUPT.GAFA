@@ -9,6 +9,12 @@ build/
 **/build/
 **/.preview/
 **/.test/
+node_modules/
+ai-gateway/.wrangler/
+ai-gateway/.dev.vars
+ai-gateway/.env
+ai-gateway/.env.*
+ai-gateway/worker-configuration.d.ts
 
 # Draft-only artifacts
 gyy-frontend-doc.md

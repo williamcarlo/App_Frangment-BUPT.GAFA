@@ -1,4 +1,8 @@
 import common from '@ohos.app.ability.common'
+import {
+  AiGatewayResult,
+  FragmentEmbedding
+} from '../model/AiModel'
 import { CommunityNode, CommunitySaveRecord } from '../model/CommunityModel'
 import { EchoCandidate, EchoRecord } from '../model/EchoModel'
 import {
@@ -10,6 +14,11 @@ import {
 } from '../model/FragmentModel'
 import { GraphEdge, GraphNode } from '../model/GraphModel'
 import { SeedData } from '../data/SeedData'
+import { AiGatewayService } from '../service/AiGatewayService'
+import {
+  AiSimilarityService,
+  SimilarFragmentMatch
+} from '../service/AiSimilarityService'
 import { CommunityService } from '../service/CommunityService'
 import { EchoService } from '../service/EchoService'
 import { RelationService } from '../service/RelationService'
@@ -51,6 +60,13 @@ struct Index {
   @State showLifecycleConfirm: boolean = false
   @State pendingLifecycleAction: string = ''
   @State pendingLifecycleFragmentId: string = ''
+  @State showAiSettings: boolean = false
+  @State aiGatewayBaseUrl: string = ''
+  @State aiGatewayToken: string = ''
+  @State aiSettingsStatus: string = ''
+  @State aiProcessingEnabled: boolean = false
+  @State aiRequestInFlight: boolean = false
+  @State embeddings: FragmentEmbedding[] = []
 
   private viewModel: FragmentAppViewModel = new FragmentAppViewModel()
 
@@ -89,6 +105,8 @@ struct Index {
       this.fragmentRelations = snapshot.relations
       this.echoRecords = snapshot.echoRecords
       this.communitySaveRecords = snapshot.communitySaveRecords
+      this.embeddings = snapshot.embeddings
+      this.aiGatewayBaseUrl = snapshot.aiGatewayBaseUrl
       this.showPrivacyExplainer = snapshot.shouldShowPrivacyExplainer
       this.hydrateCommunitySaveState()
       this.hydrateDynamicGraph()
@@ -187,13 +205,17 @@ struct Index {
       if (this.showLifecycleConfirm) {
         this.LifecycleConfirm()
       }
+
+      if (this.showAiSettings) {
+        this.AiSettingsOverlay()
+      }
     }
     .width('100%')
     .height('100%')
     .backgroundColor(BoxStyle.PAGE_BG)
     .blur(this.showInputSheet ? 2 : 0)
     .bindSheet($$this.showInputSheet, this.InputSheet(), {
-      height: 610,
+      height: 720,
       showClose: false,
       dragBar: false,
       backgroundColor: '#FBFAF6'
@@ -250,7 +272,8 @@ struct Index {
 
   // 顶层手势：横向切换三页；在个人碎片页纵向切换碎片。
   private handlePan(offsetX: number, offsetY: number): void {
-    if (this.showInputSheet) {
+    if (this.showInputSheet || this.showAiSettings ||
+      this.showPrivacyExplainer || this.showLifecycleConfirm) {
       return
     }
     if (Math.abs(offsetX) > Math.abs(offsetY) && Math.abs(offsetX) > 56) {
@@ -418,12 +441,14 @@ struct Index {
   private openInputSheet(): void {
     this.editingFragmentId = ''
     this.inputErrorText = ''
+    this.aiProcessingEnabled = false
     this.showInputSheet = true
   }
 
   private closeInputSheet(): void {
     this.editingFragmentId = ''
     this.inputErrorText = ''
+    this.aiProcessingEnabled = false
     this.showInputSheet = false
   }
 
@@ -462,6 +487,11 @@ struct Index {
       this.persistEditedFragment(tag, content, visibility)
       return
     }
+    if (this.aiProcessingEnabled && !this.isAiConfigReady()) {
+      this.inputErrorText = '请先在 Box 顶部配置幕后整理地址和本次访问口令'
+      this.showNotice('幕后整理还没配好，草稿没有丢')
+      return
+    }
     let item: FragmentItem = new FragmentItem(
       nextId,
       tag,
@@ -483,6 +513,7 @@ struct Index {
     relation: FragmentRelation,
     archivedShared: boolean
   ): Promise<void> {
+    let shouldProcessWithAi: boolean = this.aiProcessingEnabled
     let result: OperationResult = await this.viewModel.createFragment(item, relation)
     if (!result.success) {
       this.inputErrorText = result.message
@@ -498,8 +529,12 @@ struct Index {
     this.inputErrorText = ''
     this.shareEnabled = false
     this.shareChoiceMade = false
+    this.aiProcessingEnabled = false
     this.showInputSheet = false
     this.showNotice(archivedShared ? '已放入 Box · 匿名共享' : '已放入 Box · 仅自己可见')
+    if (shouldProcessWithAi) {
+      this.processFragmentWithAi(item)
+    }
   }
 
   private async persistEditedFragment(
@@ -507,6 +542,7 @@ struct Index {
     content: string,
     visibility: FragmentVisibility
   ): Promise<void> {
+    let shouldProcessWithAi: boolean = this.aiProcessingEnabled
     let index: number = this.fragmentIndexById(this.editingFragmentId)
     if (index < 0) {
       this.showNotice('要编辑的碎片已经不存在')
@@ -540,8 +576,12 @@ struct Index {
     this.fragments = nextFragments
     this.editingFragmentId = ''
     this.showInputSheet = false
+    this.aiProcessingEnabled = false
     this.inputErrorText = ''
     this.showNotice(result.message)
+    if (shouldProcessWithAi) {
+      this.processFragmentWithAi(updated)
+    }
   }
 
   private editFragment(item: FragmentItem): void {
@@ -551,6 +591,7 @@ struct Index {
     this.draftRemind = item.remind
     this.shareEnabled = item.visibility === FragmentVisibility.COMMUNITY
     this.shareChoiceMade = true
+    this.aiProcessingEnabled = false
     this.inputErrorText = ''
     this.showInputSheet = true
   }
@@ -597,6 +638,7 @@ struct Index {
     this.archivedFragments = snapshot.archivedFragments
     this.fragmentRelations = snapshot.relations
     this.communitySaveRecords = snapshot.communitySaveRecords
+    this.embeddings = snapshot.embeddings
     this.hydrateDynamicGraph()
     if (this.fragments.length > 0) {
       this.selectFragmentById(this.fragments[0].id)
@@ -637,6 +679,135 @@ struct Index {
 
   private isShareChoiceSelected(value: boolean): boolean {
     return this.shareChoiceMade && this.shareEnabled === value
+  }
+
+  private isAiConfigReady(): boolean {
+    return this.aiGatewayBaseUrl.trim().startsWith('https://') &&
+      this.aiGatewayToken.trim().length >= 16
+  }
+
+  private openAiSettings(): void {
+    this.aiSettingsStatus = ''
+    this.showAiSettings = true
+  }
+
+  private async saveAndTestAiSettings(): Promise<void> {
+    let baseUrl: string = this.aiGatewayBaseUrl.trim()
+    if (!baseUrl.startsWith('https://')) {
+      this.aiSettingsStatus = '地址必须使用 HTTPS'
+      return
+    }
+    if (this.aiGatewayToken.trim().length < 16) {
+      this.aiSettingsStatus = '请输入至少 16 位的网关访问口令'
+      return
+    }
+    this.aiSettingsStatus = '正在检测网关…'
+    try {
+      let reachable: boolean = await AiGatewayService.testConnection(baseUrl)
+      if (!reachable) {
+        this.aiSettingsStatus = '网关没有正确响应，请检查地址'
+        return
+      }
+      let result: OperationResult = await this.viewModel.saveAiGatewayBaseUrl(baseUrl)
+      if (!result.success) {
+        this.aiSettingsStatus = result.message
+        return
+      }
+      this.aiGatewayBaseUrl = baseUrl
+      this.aiSettingsStatus = '连接正常，访问口令仅保留到本次退出'
+      this.showNotice('幕后整理网关已就绪')
+    } catch (error) {
+      this.aiSettingsStatus = '连接失败，请检查网络和网关地址'
+    }
+  }
+
+  private async processFragmentWithAi(fragment: FragmentItem): Promise<void> {
+    this.aiRequestInFlight = true
+    try {
+      let consentResult: OperationResult =
+        await this.viewModel.grantAiProcessingConsent(fragment.id)
+      if (!consentResult.success) {
+        this.showNotice(consentResult.message)
+        return
+      }
+      let gatewayResult: AiGatewayResult = await AiGatewayService.analyze(
+        this.aiGatewayBaseUrl,
+        this.aiGatewayToken,
+        fragment
+      )
+      let match: SimilarFragmentMatch | null =
+        AiSimilarityService.bestMatch(gatewayResult.embedding, this.embeddings)
+      let related: FragmentRelation | null = null
+      if (match !== null) {
+        related = new FragmentRelation(
+          'ai-semantic-' + fragment.id,
+          match.fragmentId,
+          fragment.id,
+          'semantic_ai',
+          Date.now()
+        )
+      }
+      let enhanced: FragmentItem = this.aiEnhancedFragment(fragment, gatewayResult)
+      let saveResult: OperationResult =
+        await this.viewModel.saveAiProcessingResult(enhanced, gatewayResult, related)
+      if (!saveResult.success) {
+        this.showNotice(saveResult.message)
+        return
+      }
+      let index: number = this.fragmentIndexById(fragment.id)
+      if (index >= 0) {
+        let nextFragments: FragmentItem[] = this.fragments.slice()
+        nextFragments[index] = enhanced
+        this.fragments = nextFragments
+      }
+      this.embeddings = this.embeddings
+        .filter((item: FragmentEmbedding) => item.fragmentId !== fragment.id)
+        .concat([gatewayResult.embedding])
+      if (related !== null) {
+        this.fragmentRelations = this.fragmentRelations
+          .filter((item: FragmentRelation) => item.id !== related!.id)
+          .concat([related])
+      }
+      this.hydrateDynamicGraph()
+      this.showNotice('幕后整理完成 · ' + gatewayResult.analysis.summary)
+    } catch (error) {
+      this.showNotice('已安全保存在本机，幕后整理稍后再试')
+    } finally {
+      this.aiRequestInFlight = false
+    }
+  }
+
+  private aiEnhancedFragment(
+    fragment: FragmentItem,
+    result: AiGatewayResult
+  ): FragmentItem {
+    let tag: string = fragment.tag
+    if (tag === '未命名碎片' && result.analysis.normalizedTag.length > 0) {
+      tag = result.analysis.normalizedTag
+    }
+    let reminder: ReminderPreference = fragment.remind
+    if (reminder === ReminderPreference.NONE) {
+      reminder = AiGatewayService.reminderFromCode(
+        result.analysis.suggestedReminder,
+        fragment.remind
+      )
+    }
+    return new FragmentItem(
+      fragment.id,
+      tag,
+      fragment.text,
+      result.analysis.tone,
+      reminder,
+      fragment.shared,
+      fragment.createdAt,
+      fragment.createdAtTimestamp,
+      fragment.displayCode,
+      fragment.visibility,
+      Date.now(),
+      fragment.archivedAtTimestamp,
+      fragment.sourceCommunityNodeId,
+      fragment.moderationStatus
+    )
   }
 
   private nextFragmentId(): string {
@@ -1093,6 +1264,18 @@ struct Index {
       Column() {
         Row() {
           Blank()
+
+          Button(this.aiRequestInFlight ? '整理中…' : '幕后整理')
+            .height(36)
+            .fontSize(12)
+            .fontColor(BoxStyle.TEXT_SOFT)
+            .backgroundColor('rgba(255, 255, 255, 0.72)')
+            .border({ width: 1, color: BoxStyle.HAIRLINE })
+            .borderRadius(18)
+            .enabled(!this.aiRequestInFlight)
+            .onClick(() => {
+              this.openAiSettings()
+            })
         }
         .width('100%')
         .height(38)
@@ -2070,7 +2253,8 @@ struct Index {
 
   @Builder
   InputSheet() {
-    Column({ space: 20 }) {
+    Scroll() {
+      Column({ space: 20 }) {
       // 原生半模态内容：只承载输入、Tag、提醒偏好和完成动作。
       Row() {
         Text('记录碎片')
@@ -2159,6 +2343,38 @@ struct Index {
       .width('100%')
       .alignItems(HorizontalAlign.Start)
 
+      Column({ space: 10 }) {
+        Row() {
+          Text('幕后整理')
+            .fontSize(13)
+            .fontColor(BoxStyle.TEXT_MUTED)
+            .fontWeight(FontWeight.Medium)
+
+          Blank()
+
+          Text('每张单独授权')
+            .fontSize(11)
+            .fontColor('#7C817A')
+        }
+        .width('100%')
+
+        Row({ space: 12 }) {
+          this.AiChoicePill('允许 AI 整理', true)
+          this.AiChoicePill('仅保存在本机', false)
+        }
+        .width('100%')
+
+        Text(this.aiProcessingEnabled ?
+          '将把本张内容、标签和提醒偏好发送到你的加密网关；不会上传其他碎片。' :
+          '本张内容不会发送给 AI 服务。')
+          .fontSize(11)
+          .lineHeight(18)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .width('100%')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+
       Column({ space: 12 }) {
         Row() {
           Text('可见范围')
@@ -2218,11 +2434,16 @@ struct Index {
         .onClick(() => {
           this.saveDraftFragment()
         })
+      }
+      .width('100%')
+      .padding({ left: 24, right: 24, top: 24, bottom: 34 })
+      .backgroundColor('#FFFFFF')
+      .borderRadius({ topLeft: 30, topRight: 30 })
     }
     .width('100%')
-    .padding({ left: 24, right: 24, top: 24, bottom: 34 })
-    .backgroundColor('#FFFFFF')
-    .borderRadius({ topLeft: 30, topRight: 30 })
+    .height('100%')
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
   }
   @Builder
   RemindPill(item: ReminderPreference) {
@@ -2260,6 +2481,32 @@ struct Index {
       .onClick(() => {
         this.shareEnabled = value
         this.shareChoiceMade = true
+        this.inputErrorText = ''
+      })
+  }
+
+  @Builder
+  AiChoicePill(label: string, value: boolean) {
+    Text(label)
+      .fontSize(14)
+      .fontWeight(FontWeight.Medium)
+      .fontColor(this.aiProcessingEnabled === value ? '#2F322F' : '#8F928C')
+      .textAlign(TextAlign.Center)
+      .height(42)
+      .lineHeight(42)
+      .layoutWeight(1)
+      .backgroundColor(this.aiProcessingEnabled === value ?
+        'rgba(226, 228, 222, 0.96)' : '#F1F1EE')
+      .border({
+        width: 1,
+        color: this.aiProcessingEnabled === value ?
+          'rgba(68, 72, 67, 0.16)' : 'rgba(55, 57, 55, 0.04)'
+      })
+      .borderRadius(21)
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .onClick(() => {
+        this.aiProcessingEnabled = value
         this.inputErrorText = ''
       })
   }
@@ -2398,6 +2645,135 @@ struct Index {
   }
 
   @Builder
+  AiSettingsOverlay() {
+    Stack() {
+      Rect()
+        .width('100%')
+        .height('100%')
+        .fill('rgba(30, 32, 29, 0.34)')
+        .onClick(() => {
+          this.showAiSettings = false
+        })
+
+      Column({ space: 16 }) {
+        Row() {
+          Text('幕后整理设置')
+            .fontSize(21)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(BoxStyle.TEXT)
+
+          Blank()
+
+          Text('×')
+            .width(38)
+            .height(38)
+            .fontSize(23)
+            .fontColor(BoxStyle.TEXT_SOFT)
+            .textAlign(TextAlign.Center)
+            .onClick(() => {
+              this.showAiSettings = false
+            })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Text('应用只连接你自己的 HTTPS 网关；DeepSeek 与嵌入服务密钥不会进入安装包。')
+          .fontSize(13)
+          .lineHeight(21)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .width('100%')
+
+        Column({ space: 8 }) {
+          Text('网关地址')
+            .fontSize(12)
+            .fontColor(BoxStyle.TEXT_MUTED)
+            .width('100%')
+
+          TextInput({
+            placeholder: 'https://fragment-ai-gateway.你的域名',
+            text: this.aiGatewayBaseUrl
+          })
+            .width('100%')
+            .height(48)
+            .fontSize(14)
+            .fontColor(BoxStyle.TEXT)
+            .placeholderColor('#A4A7A1')
+            .backgroundColor(BoxStyle.INPUT_BG)
+            .borderRadius(16)
+            .padding({ left: 14, right: 14 })
+            .onChange((value: string) => {
+              this.aiGatewayBaseUrl = value
+              this.aiSettingsStatus = ''
+            })
+        }
+        .width('100%')
+
+        Column({ space: 8 }) {
+          Text('网关访问口令')
+            .fontSize(12)
+            .fontColor(BoxStyle.TEXT_MUTED)
+            .width('100%')
+
+          TextInput({
+            placeholder: '输入为测试设备分配的访问口令',
+            text: this.aiGatewayToken
+          })
+            .type(InputType.Password)
+            .width('100%')
+            .height(48)
+            .fontSize(14)
+            .fontColor(BoxStyle.TEXT)
+            .placeholderColor('#A4A7A1')
+            .backgroundColor(BoxStyle.INPUT_BG)
+            .borderRadius(16)
+            .padding({ left: 14, right: 14 })
+            .onChange((value: string) => {
+              this.aiGatewayToken = value
+              this.aiSettingsStatus = ''
+            })
+        }
+        .width('100%')
+
+        Text('访问口令只驻留在本次运行内存中，退出应用后不会写入本地数据库。')
+          .fontSize(11)
+          .lineHeight(18)
+          .fontColor(BoxStyle.TEXT_MUTED)
+          .width('100%')
+
+        if (this.aiSettingsStatus.length > 0) {
+          Text(this.aiSettingsStatus)
+            .fontSize(12)
+            .lineHeight(20)
+            .fontColor(this.aiSettingsStatus.startsWith('连接正常') ? '#5E7A64' : '#8F6258')
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 9, bottom: 9 })
+            .backgroundColor(BoxStyle.SOFT_PANEL)
+            .borderRadius(14)
+        }
+
+        Button('保存并检测连接')
+          .width('100%')
+          .height(50)
+          .fontSize(15)
+          .fontColor('#FFFFFF')
+          .backgroundColor(BoxStyle.BUTTON_BG)
+          .borderRadius(25)
+          .onClick(() => {
+            this.saveAndTestAiSettings()
+          })
+      }
+      .width('88%')
+      .padding({ left: 22, right: 22, top: 22, bottom: 22 })
+      .backgroundColor('#FBFAF6')
+      .borderRadius(28)
+      .shadow({ radius: 24, color: BoxStyle.SHADOW, offsetX: 0, offsetY: 12 })
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(220)
+  }
+
+  @Builder
   PrivacyExplainer() {
     Stack() {
       Rect()
@@ -2418,7 +2794,7 @@ struct Index {
           .fontColor(BoxStyle.TEXT_SOFT)
           .width('100%')
 
-        Text('当前版本没有接入真实社区服务器或大模型，社区内容为本地演示数据。')
+        Text('“幕后整理”也按每张碎片单独授权：仅发送当前内容、标签和提醒偏好到你配置的加密网关。其他碎片仍留在本机，社区内容仍为本地演示数据。')
           .fontSize(13)
           .lineHeight(21)
           .fontColor(BoxStyle.TEXT_MUTED)

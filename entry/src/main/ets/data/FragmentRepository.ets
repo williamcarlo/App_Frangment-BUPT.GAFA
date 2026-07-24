@@ -61,12 +61,13 @@ export class FragmentRepository {
   async update(fragment: FragmentItem): Promise<void> {
     await this.database.getStore().executeSql(
       `UPDATE fragments
-       SET tag = ?, content = ?, reminder = ?, visibility = ?, updated_at = ?,
+       SET tag = ?, content = ?, tone = ?, reminder = ?, visibility = ?, updated_at = ?,
            source_community_node_id = ?, moderation_status = ?
        WHERE id = ?`,
       [
         fragment.tag,
         fragment.text,
+        fragment.tone,
         fragment.remind,
         fragment.visibility,
         fragment.updatedAtTimestamp,

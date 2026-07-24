@@ -1,4 +1,9 @@
 import common from '@ohos.app.ability.common'
+import {
+  AiAnalysisRecord,
+  AiGatewayResult,
+  FragmentEmbedding
+} from '../model/AiModel'
 import { CommunitySaveRecord } from '../model/CommunityModel'
 import { EchoRecord } from '../model/EchoModel'
 import {
@@ -8,6 +13,7 @@ import {
   SharingConsent
 } from '../model/FragmentModel'
 import { CommunitySaveRepository } from '../data/CommunitySaveRepository'
+import { AiRepository } from '../data/AiRepository'
 import { ConsentRepository } from '../data/ConsentRepository'
 import { DatabaseManager } from '../data/DatabaseManager'
 import { EchoRepository } from '../data/EchoRepository'
@@ -32,11 +38,14 @@ export class AppDataSnapshot {
   relations: FragmentRelation[] = []
   echoRecords: EchoRecord[] = []
   communitySaveRecords: CommunitySaveRecord[] = []
+  embeddings: FragmentEmbedding[] = []
+  aiGatewayBaseUrl: string = ''
   shouldShowPrivacyExplainer: boolean = false
 }
 
 export class FragmentAppViewModel {
   private database: DatabaseManager = new DatabaseManager()
+  private aiRepository: AiRepository = new AiRepository(this.database)
   private fragmentRepository: FragmentRepository = new FragmentRepository(this.database)
   private relationRepository: RelationRepository = new RelationRepository(this.database)
   private echoRepository: EchoRepository = new EchoRepository(this.database)
@@ -63,6 +72,8 @@ export class FragmentAppViewModel {
     snapshot.relations = await this.relationRepository.loadAll()
     snapshot.echoRecords = await this.echoRepository.loadAll()
     snapshot.communitySaveRecords = await this.communitySaveRepository.loadAll()
+    snapshot.embeddings = await this.aiRepository.loadEmbeddings()
+    snapshot.aiGatewayBaseUrl = await this.metadataRepository.getValue('ai_gateway_base_url')
     snapshot.shouldShowPrivacyExplainer =
       await this.metadataRepository.getValue('privacy_explainer_v1') !== 'acknowledged'
     return snapshot
@@ -120,6 +131,52 @@ export class FragmentAppViewModel {
     }
   }
 
+  async grantAiProcessingConsent(fragmentId: string): Promise<OperationResult> {
+    try {
+      await this.aiRepository.grantConsent(fragmentId, Date.now())
+      return new OperationResult(true, '')
+    } catch (error) {
+      return new OperationResult(false, '无法记录幕后整理授权')
+    }
+  }
+
+  async saveAiProcessingResult(
+    fragment: FragmentItem,
+    result: AiGatewayResult,
+    relation: FragmentRelation | null
+  ): Promise<OperationResult> {
+    let store = this.database.getStore()
+    store.beginTransaction()
+    try {
+      await this.fragmentRepository.update(fragment)
+      await this.aiRepository.saveAnalysis(new AiAnalysisRecord(
+        fragment.id,
+        result.analysisProvider,
+        result.analysisModel,
+        result.analysis,
+        Date.now()
+      ))
+      await this.aiRepository.saveEmbedding(result.embedding)
+      if (relation !== null) {
+        await this.relationRepository.insertOrReplace(relation)
+      }
+      store.commit()
+      return new OperationResult(true, '幕后整理完成')
+    } catch (error) {
+      store.rollBack()
+      return new OperationResult(false, '整理结果保存失败，本地碎片仍然安全')
+    }
+  }
+
+  async saveAiGatewayBaseUrl(baseUrl: string): Promise<OperationResult> {
+    try {
+      await this.metadataRepository.putValue('ai_gateway_base_url', baseUrl)
+      return new OperationResult(true, '幕后整理地址已保存')
+    } catch (error) {
+      return new OperationResult(false, '幕后整理地址保存失败')
+    }
+  }
+
   async archiveFragment(fragmentId: string): Promise<OperationResult> {
     try {
       await this.fragmentRepository.archive(fragmentId, Date.now())
@@ -146,6 +203,7 @@ export class FragmentAppViewModel {
       await this.consentRepository.deleteForFragment(fragmentId)
       await this.echoRepository.deleteForFragment(fragmentId)
       await this.communitySaveRepository.deleteForFragment(fragmentId)
+      await this.aiRepository.deleteForFragment(fragmentId)
       await this.fragmentRepository.deletePermanently(fragmentId)
       store.commit()
       return new OperationResult(true, '碎片已永久删除')
